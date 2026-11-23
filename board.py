@@ -110,7 +110,7 @@ NPINS = {'DIP40': 40, 'PLCC32S': 32, 'PLCC44': 44, 'SOP28': 28, 'SO8': 8, 'SO14'
          'SO16': 16, 'SO16W': 16, 'SO20W': 20, 'SOP16': 16, 'TSSOP16': 16, 'PSSO24': 25,
          'HSOIC8': 9, 'SOT23': 3, 'SOT89': 3, 'OSC': 4}
 
-BOARD_W, BOARD_H = 200.0, 120.0
+BOARD_W, BOARD_H = 230.0, 147.0
 
 PARTS = []          # dicts: ref, value, fp, x, y, rot, pins {pad: net}, mpn, note, dnp
 
@@ -413,7 +413,7 @@ for k in range(4):
     decouple('C%d' % (30 + k), 118 + 22 * k, 2, vcc='24V_IO', gnd='0V_IO', value='100nF 50V')
 
 # ============================================================ field supply and status
-# 24V_IO comes in on J4. It feeds the VNI4140Ks directly (up to 8 A in all:
+# 24V_IO comes in on J4 pins 9-10. It feeds the VNI4140Ks directly (up to 8 A in all:
 # fuse it outside the board). A reversed field supply is shorted by D6: the
 # external fuse must blow. The sensor-supply terminals are fed through a PTC.
 two('D6', 'SMBJ33A', 'SMB', 100, 4, '24V_IO', '0V_IO', note='field supply TVS')
@@ -439,7 +439,8 @@ two('R33', '22k', 'R', 102, 44, '+5V', '~{FIELD_OK}', note='PB5 pull-up')
 # Field terminals (3.81 mm pluggable, top edge)
 part('J2', 'DI 1-8', 'TB10', 10, 3, pins={**{i + 1: DI[i] for i in range(8)}, 9: '24V_SNS', 10: '0V_IO'}, note='IN1-IN8, 24V (sensor supply), 0V')
 part('J3', 'DI 9-16', 'TB10', 50, 3, pins={**{i + 1: DI[8 + i] for i in range(8)}, 9: '24V_SNS', 10: '0V_IO'}, note='IN9-IN16, 24V (sensor supply), 0V')
-part('J4', 'DO 1-8', 'TB10', 120, 3, pins={1: '24V_IO', 2: '0V_IO', **{3 + i: 'OUT%d' % (i + 1) for i in range(8)}}, note='24V_IO in, 0V_IO in, OUT1-OUT8')
+part('J4', 'DO 1-8', 'TB10', 120, 3, pins={**{i + 1: 'OUT%d' % (i + 1) for i in range(8)}, 9: '24V_IO', 10: '0V_IO'},
+     note='OUT1-OUT8, 24V_IO in, 0V_IO in')
 part('J5', 'DO 9-16', 'TB10', 160, 3, pins={**{i + 1: 'OUT%d' % (9 + i) for i in range(8)}, 9: '0V_IO', 10: '0V_IO'}, note='OUT9-OUT16, 0V, 0V (load return)')
 
 # ============================================================ analog isolation
@@ -623,3 +624,356 @@ BRIDGES = {'U20': ('field', 'logic'), 'U21': ('field', 'logic'), 'U22': ('field'
            'U26': ('logic', 'field'), 'U27': ('logic', 'field'), 'U35': ('field', 'logic'),
            'U42': ('logic', 'analog'), 'U43': ('logic', 'analog'), 'PS1': ('logic', 'analog'),
            'PS2': ('logic', 'rs485'), 'U50': ('logic', 'rs485'), 'C2': ('logic', 'PE')}
+
+
+def net_areas():
+    """net -> area name, found by following every part except the bridges and
+    the connectors (whose pins aren't joined inside). None if a net reaches no
+    power net, or several areas' power nets."""
+    area_of = {n: a for a, ns in AREAS.items() for n in ns}
+    area_of['PE'] = 'PE'
+    parent = {}
+
+    def find(x):
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for p in PARTS:
+        r = p['ref']
+        if r in BRIDGES or (r[0] == 'J' and r[1].isdigit()):
+            continue
+        ns = [n for n in p['pins'].values() if n]
+        for n in ns[1:]:
+            parent[find(ns[0])] = find(n)
+    groups = {}
+    for n in nets():
+        groups.setdefault(find(n), set()).add(n)
+    out = {}
+    for g in groups.values():
+        areas = {area_of[n] for n in g if n in area_of}
+        a = next(iter(areas)) if len(areas) == 1 else None
+        for n in g:
+            out[n] = a
+    return out
+
+
+# ============================================================ placement
+# Courtyard of each footprint at rotation 0, relative to its origin
+# (xmin, ymin, xmax, ymax). Written by fpgeom.py; check_place.py checks it.
+CRT = {
+    'B05XT': (-7.1, -6.6, 7.1, 6.6), 'C': (-1.48, -0.73, 1.48, 0.73),
+    'C0805': (-1.7, -0.98, 1.7, 0.98), 'C1206': (-2.3, -1.15, 2.3, 1.15),
+    'C1210': (-2.3, -1.6, 2.3, 1.6), 'C1808': (-3.1, -1.4, 3.1, 1.4),
+    'CP10': (-6.65, -5.5, 6.65, 5.5), 'DIP40': (-1.53, -1.59, 16.77, 49.84),
+    'F1206': (-2.28, -1.13, 2.28, 1.13), 'F1812': (-2.95, -1.95, 2.95, 1.95),
+    'H1x2': (-1.77, -1.77, 1.77, 4.32), 'H1x3': (-1.77, -1.77, 1.77, 6.85),
+    'H1x6': (-1.77, -1.77, 1.77, 14.47), 'H2x16': (-1.77, -1.78, 4.32, 39.88),
+    'H2x3': (-1.77, -1.77, 4.32, 6.85), 'HOLE': (-3.45, -3.45, 3.45, 3.45),
+    'HOLE_PE': (-3.45, -3.45, 3.45, 3.45), 'HSOIC8': (-3.7, -2.7, 3.7, 2.7),
+    'L7028': (-4.45, -3.55, 4.45, 3.55), 'LED': (-1.68, -0.95, 1.68, 0.95),
+    'OSC': (-4.0, -3.35, 4.0, 3.35), 'PLCC32S': (-10.8, -5.72, 8.26, 15.88),
+    'PLCC44': (-9.1, -9.1, 9.1, 9.1), 'PSSO24': (-6.04, -5.4, 6.04, 5.4),
+    'R': (-1.48, -0.73, 1.48, 0.73), 'R0805': (-1.68, -0.95, 1.68, 0.95),
+    'R1206': (-2.28, -1.13, 2.28, 1.13), 'R2010': (-3.18, -1.58, 3.18, 1.58),
+    'SMA': (-3.5, -1.75, 3.5, 1.75), 'SMB': (-3.65, -2.25, 3.65, 2.25),
+    'SO14': (-3.7, -4.58, 3.7, 4.58), 'SO16': (-3.7, -5.2, 3.7, 5.2),
+    'SO16W': (-5.93, -5.4, 5.93, 5.4), 'SO20W': (-5.93, -6.65, 5.93, 6.65),
+    'SO8': (-3.7, -2.7, 3.7, 2.7), 'SOD123': (-2.35, -1.15, 2.35, 1.15),
+    'SOP16': (-4.25, -5.45, 4.25, 5.45), 'SOP28': (-6.95, -9.33, 6.95, 9.33),
+    'SOT23': (-1.93, -1.7, 1.93, 1.7), 'SOT89': (-2.85, -2.5, 2.25, 2.5),
+    'SW': (-5.0, -3.7, 5.0, 3.7), 'TB10': (-3.21, -2.3, 37.39, 8.5),
+    'TB12': (-3.21, -2.3, 45.01, 8.5), 'TB3': (-3.21, -2.3, 10.72, 8.5),
+    'TB8': (-3.21, -2.3, 29.77, 8.5), 'TB9': (-3.21, -2.3, 33.58, 8.5),
+    'TSSOP16': (-3.85, -2.75, 3.85, 2.75), 'URB': (-13.2, -13.2, 13.2, 13.2),
+}
+
+
+def rotate(x, y, rot):
+    """KiCad footprint rotation (degrees, counter-clockwise on screen, y down)."""
+    return {0: (x, y), 90: (y, -x), 180: (-x, -y), 270: (-y, x)}[rot % 360]
+
+
+P_BY_REF = {p['ref']: p for p in PARTS}
+
+
+def box(ref, x=None, y=None, rot=None):
+    """Courtyard (xmin, ymin, xmax, ymax) on the board."""
+    p = P_BY_REF[ref]
+    x = p['x'] if x is None else x
+    y = p['y'] if y is None else y
+    rot = p['rot'] if rot is None else rot
+    x0, y0, x1, y1 = CRT[p['fp']]
+    pts = [rotate(a, b, rot) for a, b in ((x0, y0), (x1, y1))]
+    return (x + min(q[0] for q in pts), y + min(q[1] for q in pts),
+            x + max(q[0] for q in pts), y + max(q[1] for q in pts))
+
+
+PLACE = {}                              # ref -> (x, y, rot) of the footprint origin
+
+
+def at(ref, cx, cy, rot=0):
+    """Place ref with its courtyard centred on (cx, cy)."""
+    b = box(ref, 0, 0, rot)
+    PLACE[ref] = (round(cx - (b[0] + b[2]) / 2, 3), round(cy - (b[1] + b[3]) / 2, 3), rot)
+
+
+def origin(ref, x, y, rot=0):
+    PLACE[ref] = (x, y, rot)
+
+
+# Areas, 3 mm apart. Bridges (optos, isolators, converters) straddle the gaps.
+GAP = 3.0
+Y_FIELD = 45.5                          # field digital: y 0 .. 45.5
+Y_LOGIC = Y_FIELD + GAP                 # logic: y 48.5 .. 95
+Y_LOW = 95.0
+Y_ANALOG = Y_LOW + GAP                  # analog and RS-485: y 98 .. bottom
+X_485 = 192.5                           # analog x < 192.5, RS-485 x > 195.5
+AREA_RECTS = {
+    'field': [(0, 0, BOARD_W, Y_FIELD)],
+    'logic': [(0, Y_LOGIC, BOARD_W, Y_LOW)],
+    'analog': [(0, Y_ANALOG, X_485, BOARD_H)],
+    'rs485': [(X_485 + GAP, Y_ANALOG, BOARD_W, BOARD_H)],
+    'PE': [(0, Y_LOGIC, 20, Y_LOW)],
+}
+GAP_FL = Y_FIELD + GAP / 2              # 47.0: centre of the field / logic gap
+GAP_LA = Y_LOW + GAP / 2                # 96.5: centre of the logic / analog gap
+
+# ---------------------------------------------------------------- field digital
+# Terminals along the top edge, turned 180 degrees so the plugs face out;
+# pin k is 3.81 mm to the LEFT of pin k-1. Each channel's parts sit in a
+# column under its terminal pin.
+T_TOP = 9.0
+J_X0 = {'J2': 42.0, 'J3': 86.0, 'J4': 181.5, 'J5': 225.5}
+for _j, _x in J_X0.items():
+    origin(_j, _x, T_TOP, 180)
+
+
+def di_x(n):
+    return J_X0['J2' if n <= 8 else 'J3'] - 3.81 * ((n - 1) % 8)
+
+
+def do_x(n):
+    return J_X0['J4' if n <= 8 else 'J5'] - 3.81 * ((n - 1) % 8)
+
+
+for n in range(1, 17):
+    x = di_x(n)
+    at('R%d' % (100 + n), x, 14.6, 270)          # 4.7k, pad 1 (terminal) up
+    at('D%d' % (120 + n), x, 19.9, 270)          # 1N4148W
+    at('D%d' % (100 + n), x, 24.6, 90)           # LED, anode up
+    at('R%d' % (120 + n), x, 28.6, 270)          # 2.2k shunt
+    at('C%d' % (100 + n), x, 32.2, 270)          # 10 nF
+    at('R%d' % (140 + n), x, 52.9, 270)          # 22k pull-up (logic)
+    x = do_x(n)
+    at('R%d' % (240 + n), x, 27.4, 270)          # LED resistor, pad 1 (OUT) up
+    at('D%d' % (200 + n), x, 31.6, 90)           # LED
+    at('C%d' % (200 + n), x, 35.0, 270)          # 10 nF on OUT
+    at('R%d' % (220 + n), x, 38.6, 270)          # VNI input pull-down
+    at('R%d' % (200 + n), x, 52.9, 90)           # 1k opto LED (logic)
+for k in range(4):
+    cx = sum(di_x(4 * k + j) for j in range(1, 5)) / 4
+    at('U%d' % (20 + k), cx, GAP_FL, 270)        # input optos: LEDs (1-8) up, in the field area
+    cx = sum(do_x(4 * k + j) for j in range(1, 5)) / 4
+    at('U%d' % (24 + k), cx, GAP_FL, 90)         # output optos: LEDs (1-8) down, in the logic area
+    at('U%d' % (30 + k), cx, 18.3, 90)           # VNI4140K: outputs (13-24) up
+# VNI decoupling, in the gaps between the drivers
+for _r, _x in (('C30', 168.165), ('C31', 152.9), ('C32', 212.165), ('C33', 197.4)):
+    at(_r, _x, 18.3, 90)
+
+# Field supply: J4 pins 9-10 (x 151.0, 147.2) bring 24V_IO and 0V_IO in
+at('C34', 134.0, 18.0)                           # 47 uF
+at('D6', 134.5, 27.0)                            # SMBJ33A
+at('F2', 122.0, 14.5)                            # sensor supply PTC
+at('U34', 122.0, 21.5)                           # 78L05 -> +5V_IO
+at('C35', 122.0, 26.0)
+at('C36', 122.0, 28.5)
+at('U35', 136.0, GAP_FL, 270)                    # fault / field-power opto
+at('R30', 135.0, 40.5)
+at('R31', 129.0, 38.0)
+at('R32', 133.0, 53.0)
+at('R33', 137.0, 53.0)
+
+# ---------------------------------------------------------------- logic, upper row
+# Input buffers under the input optos, output latches under the output optos
+for _r, _n0 in (('U14', 1), ('U15', 9)):
+    at(_r, sum(di_x(_n0 + j) for j in range(8)) / 8, 60.5, 270)
+for _r, _n0 in (('U16', 1), ('U17', 9)):
+    at(_r, sum(do_x(_n0 + j) for j in range(8)) / 8, 60.5, 90)
+at('C24', 37.3, 60.5, 90)
+at('C25', 81.3, 60.5, 90)
+at('C26', 159.6, 60.5, 90)
+at('C27', 203.6, 60.5, 90)
+# Decoding: 74HC00 x2, 74HC30, 74HC138
+for _i, _r in enumerate(('U6', 'U7', 'U8', 'U9')):
+    at(_r, 93 + 10 * _i, 56.0, 90)
+    at('C%d' % (16 + _i), 93 + 10 * _i, 61.3)
+# Output clocks (74HC32) and watchdog (74HC123), between the output latches
+at('U10', 182.0, 60.0)
+at('U11', 196.0, 60.0)
+at('C20', 182.0, 66.3)
+at('C21', 196.0, 66.3)
+at('R5', 189.0, 56.5, 90)
+at('C5', 189.0, 62.0, 90)
+at('R6', 186.0, 66.3)
+at('R7', 191.8, 66.3)
+# Clock, reset, pull-ups
+at('X1', 46.5, 59.0)
+at('C22', 46.5, 64.3)
+at('R8', 53.0, 57.0, 90)
+at('R9', 56.0, 57.0, 90)
+at('U12', 41.5, 65.5)
+at('R10', 53.0, 62.5, 90)
+at('R11', 56.0, 62.5, 90)
+at('R12', 59.0, 62.5, 90)
+at('C23', 62.5, 62.5, 90)
+# Expansion header (2x16) lying along the upper row
+at('J11', 110.0, 65.2, 90)
+# USB serial header and jumpers
+at('J10', 146.0, 65.5, 90)
+at('R21', 152.0, 61.0)
+at('JP2', 142.0, 61.0, 90)
+at('JP1', 148.0, 57.0, 90)
+# Left edge: reset button, LEDs, PE hole
+at('SW1', 7.0, 54.0, 90)
+at('H1', 4.5, 62.5)
+for _i, (_d, _r) in enumerate((('D3', 'R18'), ('D4', 'R19'), ('D5', 'R20'))):
+    at(_d, 12.5, 59.5 + 2.6 * _i)
+    at(_r, 17.0, 59.5 + 2.6 * _i)
+at('C2', 5.5, 67.5)                              # PE to GND
+
+# ---------------------------------------------------------------- logic, CPU row
+ROW = 80.0
+at('U1', 73.0, ROW, 90)                          # W65C02S: pin 1 bottom left
+at('U2', 110.0, ROW, 90)                         # RAM
+at('U3', 131.0, ROW)                             # flash socket
+at('U4', 168.5, ROW, 90)                         # VIA
+at('U5', 205.5, ROW)                             # UART
+at('C11', 92.0, 91.5)
+at('C12', 110.0, 89.0)
+at('C13', 131.0, 93.0)
+at('C14', 184.0, 91.5)
+at('C15', 217.0, 84.5, 90)
+for _i, _r in enumerate(('R13', 'R14', 'R15', 'R16', 'R17')):
+    at(_r, 147.5 + 3.4 * _i, 91.5)
+# UART interrupt transistors, right of the UART
+at('Q1', 218.5, 73.0)
+at('Q2', 218.5, 79.0)
+at('R1', 223.5, 72.0)
+at('R2', 223.5, 78.0)
+at('R3', 223.5, 74.0)
+at('R4', 223.5, 80.0)
+at('H2', 225.5, 62.0)
+
+# Power input, left edge: J1 faces out to the left
+origin('J1', 9.0, 72.3, 270)
+at('F1', 15.5, 71.0)
+at('D1', 23.0, 71.0)
+at('D2', 16.0, 75.5)
+at('C3', 23.5, 75.0)
+at('C4', 23.5, 78.6)
+at('U13', 31.0, 74.5)
+at('C6', 29.0, 70.0)
+at('C7', 37.0, 70.0)
+at('C8', 37.0, 72.0)
+at('L1', 39.3, 78.5)
+at('R22', 31.0, 79.0)
+at('R23', 31.0, 81.0)
+at('C9', 45.5, 76.0, 90)
+at('C10', 45.5, 81.0, 90)
+at('C1', 35.6, 89.0)
+at('C41', 16.5, 81.3)                           # URB input
+
+# ---------------------------------------------------------------- isolation row
+at('PS1', 14.0, GAP_LA, 270)                     # URB: input pins (1, 2) up
+at('U42', 60.0, GAP_LA, 270)                     # ISO7741: side 1 up
+at('U43', 72.0, GAP_LA, 270)                     # ISO7720: side 1 up
+at('C46', 52.0, 92.8)
+at('C47', 52.0, 100.0)
+at('C48', 78.0, 92.8)
+at('C49', 78.0, 100.0)
+# B0505XT: pins 1, 2 (input) and 4 (output 0V) share a row, so the barrier
+# runs between pins 2 and 4. Turned 270 degrees, 1 and 2 are up (logic) and
+# 4 and 5 down (RS-485), with the gap centred 1.27 mm below the body centre.
+at('PS2', 222.5, GAP_LA - 1.27, 270)
+at('U50', 207.0, GAP_LA, 270)                    # CA-IS3082WX: side A up
+at('C60', 199.0, 91.6)
+at('C62', 195.5, 91.6)
+at('R51', 198.0, 93.6)
+
+# ---------------------------------------------------------------- analog
+# Chip row under the isolators
+at('U40', 33.0, 103.5)                           # 78L05 -> +5VA
+at('C40', 33.5, 109.5)                           # URB output 10 uF
+at('C42', 38.0, 103.0, 90)
+at('C43', 39.5, 108.5)
+at('U41', 44.0, 103.0)                           # REF3040
+at('C44', 44.0, 106.6)
+at('C45', 47.5, 103.0, 90)
+at('U44', 55.0, 107.0, 90)                       # MCP3208: CH0-7 down
+at('C50', 63.0, 107.0, 90)
+at('U45', 100.0, 106.0)                          # DAC7568
+at('C51', 106.0, 106.0, 90)
+at('C52', 94.0, 106.0, 90)
+at('R34', 100.0, 110.3)
+at('U46', 115.0, 106.5, 90)                      # LM324, channels 1-4
+at('C53', 121.5, 106.5, 90)
+at('U47', 165.0, 106.5, 90)                      # LM324, channels 5-8
+at('C54', 171.5, 106.5, 90)
+
+# Channel cells above the bottom terminals: AI cells 11 mm wide from x 2,
+# AO cells 12.5 mm wide from x 91, rows from y 113 down to the terminals.
+AI_W, AO_W, CELL_Y = 11.0, 12.5, 113.0
+for n in range(1, 9):
+    x, y = 2.0 + AI_W * (n - 1), CELL_Y
+    at('R%d' % (300 + n), x + 1.0, y + 2.5, 90)   # 15k
+    at('R%d' % (310 + n), x + 2.8, y + 2.5, 90)   # 10k
+    at('R%d' % (320 + n), x + 4.6, y + 2.5, 90)   # 1k
+    at('C%d' % (300 + n), x + 6.4, y + 2.5, 90)   # 100 nF
+    at('D%d' % (310 + n), x + 9.1, y + 2.5)       # BAV99
+    at('JP%d' % (300 + n), x + 2.2, y + 8.3)      # mA jumper
+    at('R%d' % (330 + n), x + 5.8, y + 8.3, 90)   # 499R
+    at('F%d' % (300 + n), x + 2.3, y + 15.5, 90)  # PTC
+    at('D%d' % (300 + n), x + 6.6, y + 15.5, 90)  # SMAJ12A
+for n in range(1, 9):
+    x, y = 91.0 + AO_W * (n - 1), CELL_Y
+    at('Q%d' % (400 + n), x + 2.9, y + 2.6)       # BCX56
+    at('Q%d' % (410 + n), x + 8.0, y + 2.0)       # BC847
+    at('R%d' % (410 + n), x + 11.0, y + 2.5, 90)  # 22R
+    at('JP%d' % (400 + n), x + 3.3, y + 9.8)      # V / mA
+    at('R%d' % (400 + n), x + 8.0, y + 6.3)       # base 1k
+    at('R%d' % (420 + n), x + 8.0, y + 8.1)       # 30k
+    at('R%d' % (430 + n), x + 8.0, y + 9.9)       # 10k
+    at('R%d' % (450 + n), x + 8.0, y + 11.7)      # 10k feedback
+    at('C%d' % (400 + n), x + 11.0, y + 7.0, 90)  # compensation
+    at('C%d' % (410 + n), x + 11.0, y + 10.2, 90)  # 10 nF on OUT
+    at('R%d' % (440 + n), x + 10.9, y + 13.8, 90)  # 124R
+    at('F%d' % (400 + n), x + 2.3, y + 18.0, 90)  # PTC
+    at('D%d' % (400 + n), x + 6.6, y + 18.0, 90)  # SMAJ15A
+
+# Bottom terminals (plugs face down, out of the board)
+T_BOT = BOARD_H - 9.0
+origin('J6', 25.0, T_BOT)
+origin('J7', 100.0, T_BOT)
+origin('J8', 140.0, T_BOT)
+origin('J9', 200.0, T_BOT)
+at('H3', 5.0, BOARD_H - 6.0)
+at('H4', 225.5, BOARD_H - 6.0)
+
+# ---------------------------------------------------------------- RS-485 (bus side)
+at('C61', 205.0, 106.0, 90)
+at('R50', 212.0, 106.0, 90)
+at('C63', 222.0, 105.5)
+at('C64', 222.0, 108.0)
+at('R52', 210.0, 116.0, 90)
+at('R53', 213.0, 116.0, 90)
+at('R54', 218.0, 116.0, 90)
+at('JP3', 222.5, 116.0)
+at('D7', 205.0, 116.0)
+
+for _p in PARTS:
+    if _p['ref'] not in PLACE:
+        raise SystemExit('no placement for ' + _p['ref'])
+    _p['x'], _p['y'], _p['rot'] = PLACE[_p['ref']]

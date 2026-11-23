@@ -1,6 +1,8 @@
 # C02IO: W65C02S industrial I/O board (design spec)
 
-Status: **netlist written and checked (2026-11-20).** `board.py` has every part, footprint and pin connection; `python check_board.py` passes. Every chip's pin table was checked against its current datasheet (listed at the top of `board.py`). Positions in `board.py` are rough; placement, the KiCad board and the schematic (`mk_pcb.py`, `mk_sch.py`, as in C02COMM at `C:\Projects\mymensch\hardware\c02board`) are next.
+Status: **netlist written and checked (2026-11-20).** `board.py` has every part, footprint and pin connection; `python check_board.py` passes. Every chip's pin table was checked against its current datasheet (listed at the top of `board.py`). **Placed (2026-11-23):** every part has its position and rotation in `board.py`, and `python check_place.py png` passes (no courtyard overlaps; every part inside its isolated area; every bridge pad on the right side of its gap). `place.png` shows it. The KiCad board and schematic (`mk_pcb.py`, `mk_sch.py`, as in C02COMM at `C:\Projects\mymensch\hardware\c02board`) are next.
+
+![placement](place.png)
 
 The datasheet check changed a few things in this spec; see **Changes from the datasheet check** below.
 
@@ -139,7 +141,7 @@ Phoenix MC 1,5/x-G-3.81 headers go up to 16 pins, so the groups are split:
 | Ref | Pins | Order |
 |---|---|---|
 | J2, J3 | 10 each | IN1-IN8 (IN9-IN16), 24V sensor supply (through a 0.5 A PTC), 0V_IO |
-| J4 | 10 | 24V_IO in, 0V_IO in, OUT1-OUT8 |
+| J4 | 10 | OUT1-OUT8, 24V_IO in, 0V_IO in |
 | J5 | 10 | OUT9-OUT16, 0V_IO, 0V_IO (load return) |
 | J6 | 12 | AI1, AI2, 0V, AI3, AI4, 0V, ... AI7, AI8, 0V |
 | J7 | 8 | OUT1, COM1 ... OUT4, COM4 |
@@ -149,9 +151,11 @@ Phoenix MC 1,5/x-G-3.81 headers go up to 16 pins, so the groups are split:
 
 ## Board
 
-- **Size and layers:** about **200 x 120 mm**, **4 layers** (GND and power planes; better for the analog section, and cheap at JLCPCB now).
+- **Size and layers:** **230 x 147 mm**, **4 layers** (GND and power planes; better for the analog section, and cheap at JLCPCB now). The spec guessed 200 x 120; the placement needs more. The 32 field channels sit at the terminals' 3.81 mm pitch, about 45 mm deep with their optos. Each analog channel needs a cell 11 mm (input) or 12.5 mm (output) wide and about 22 mm deep.
+- **Bands, top to bottom:** field digital (terminals on the top edge), logic (CPU row; 24 V input on the left edge), then analog (terminals on the bottom edge) with RS-485 in the bottom-right corner. The optos, isolators, DC-DC converters and the RS-485 chip straddle the 3 mm gaps between them.
 - **Isolation:** four copper areas (logic, field digital, analog, RS-485), each with its own planes on all 4 layers. A ≥3 mm gap separates them, crossed only under the optos, digital isolators, DC-DC converters and the RS-485 chip.
-- **Mounting:** 4 M3 holes. H1 is plated and on PE, with 1 nF 2 kV from PE to logic 0 V. The others are bare. A DIN-rail mount can clip onto the holes.
+- **B0505XT orientation:** its output 0V (pin 4) is in the same row as the input pins 1 and 2, so its barrier runs between pins 2 and 4, not between the rows. It is turned 270 degrees with the gap between pins 2 and 4. Pin 8 (NC, "isolated from circuitry") ends up on the logic side: leave it unconnected with plane clearance around it.
+- **Mounting:** 4 M3 holes, at the left and right edges of the logic band and in the bottom corners. H1 is plated and on PE, with 1 nF 2 kV from PE to logic 0 V. The others are bare. A DIN-rail mount can clip onto the holes.
 
 ## Cost notes
 
@@ -175,9 +179,19 @@ Phoenix MC 1,5/x-G-3.81 headers go up to 16 pins, so the groups are split:
 | 74HC123 | CD74HC123, 100k/2.2 µF ≈ 100 ms (tW = 0.45 RC) | TI's 74HC123 is the CD74HC123. Kick it at least every 25 ms. |
 | reset supervisor not chosen | DS1813R-10 (SOT-23) | Documented pushbutton input, 150 ms stretch. |
 
+## Files
+
+| File | What it is |
+|---|---|
+| `board.py` | **The design.** Every part, footprint, pin connection, position and rotation, and the isolated areas. Edit this, then regenerate the rest. |
+| `check_board.py` | Plain Python. Checks the netlist: pinouts, buses, decoding, isolation, every channel. |
+| `check_place.py` | Plain Python + matplotlib. Checks the placement and draws `place.png` (`python check_place.py png`). |
+| `mk_fp.py` | Writes the two Mornsun footprints into `c02io.pretty`, from the datasheets' top-view layouts. |
+| `fpgeom.py` | Reads courtyards and pads from the KiCad libraries; prints the `CRT` table in `board.py`. |
+
 ## Still to do
 
-- **Placement and layout:** `mk_pcb.py`, `mk_sch.py`, `check_place.py`, as in C02COMM. Two footprints must be drawn in a project library: `c02io:Mornsun_URB_YMD-6WR3_THT` (5 pin positions, pin 4 absent, 20.32 mm column spacing) and `c02io:Mornsun_B05_XT-1WR3_SMD` (pads 1, 2, 4 / 8, 5 at 2.54 mm, rows about 10.1 mm apart). Take the dimensions from the Mornsun drawings.
+- **KiCad board and schematic:** `mk_pcb.py` (4 layers, per-area planes, net classes, JLCPCB rules), `mk_sch.py` (one sheet per block), then routing and `mk_fab.py` (Gerbers, BOM with LCSC numbers, pick-and-place file).
 - **Datasheet details still open:**
   - **SST39SF010A:** only use the Rev F (May 2025) datasheet. It corrected the PLCC pin table.
   - **CJ78L05 (LCSC C2079):** the pin order (1 OUT, 2 GND, 3 IN) came from a mirror of JSCJ's datasheet; check it against LCSC's copy. The SOT-23 version has a different pinout.
@@ -188,4 +202,4 @@ Phoenix MC 1,5/x-G-3.81 headers go up to 16 pins, so the groups are split:
   - **Fallbacks:** the SC16C2552B (discontinued) and XR16L2552 (obsolete) are ruled out. If the TL16C2552 can't be had, use two W65C51N chips (their transmit-empty flag is stuck).
   - **Also check:** JLCPCB/LCSC numbers for every SMD part, and choose the PTCs (50 mA hold, 30 V+, 1812; 0.5 A for the sensor supply).
 - **Output stage stability:** simulate the op-amp, the emitter follower and a long cable with the compensation values in `board.py`.
-- **Field supply current:** up to 8 A through J4 pin 1 and the 24V_IO copper with every output on. That is at the terminal's limit: size the copper for it, or split the supply across both DO blocks.
+- **Field supply current:** up to 8 A through J4 pin 9 and the 24V_IO copper with every output on. That is at the terminal's limit: size the copper for it, or split the supply across both DO blocks.

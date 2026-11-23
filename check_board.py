@@ -338,12 +338,12 @@ for n in range(1, 17):
              and all(pin(vni, k) == o for k in VNI_OUT[ch]) and pin(vni, VNI_ST[ch]) == 'OUT_FLT'
              and two_pin('R%d' % (240 + n)) == (o, 'DO%d_L' % n)
              and two_pin('D%d' % (200 + n)) == ('0V_IO', 'DO%d_L' % n))
-    j, jp = ('J4', bit + 3) if n <= 8 else ('J5', bit + 1)
+    j, jp = ('J4', 'J5')[(n - 1) // 8], bit + 1
     if not (chain and pin(j, jp) == o):
         okdo = False
         print('       output %d: chain %s, terminal %s' % (n, chain, pin(j, jp) == o))
 check(okdo, '16 outputs: latch bit -> 1k -> opto -> VNI4140K IN, all 3 OUT pins, STAT, LED; output n = bit (n-1)%8')
-check(pin('J4', 1) == '24V_IO' and pin('J4', 2) == '0V_IO', 'field supply in on J4 pins 1-2')
+check(pin('J4', 9) == '24V_IO' and pin('J4', 10) == '0V_IO', 'field supply in on J4 pins 9-10')
 check(pin('U35', 1) == 'FLT_A' and pin('U35', 2) == 'OUT_FLT' and pin('U35', 16) == '~{OUT_FLT}'
       and two_pin('R30') == ('+5V_IO', 'FLT_A'), 'any VNI STAT low -> opto -> PB4 low')
 check(pin('U35', 3) == 'FPW_A' and pin('U35', 4) == '0V_IO' and pin('U35', 14) == '~{FIELD_OK}'
