@@ -203,14 +203,14 @@ python check_board.py
 python check_place.py png
 python mk_sch.py
 python check_sch.py
-"C:\Program Files\KiCad.0in\python.exe" mk_pcb.py
+"C:\Program Files\KiCad\10.0\bin\python.exe" mk_pcb.py
 ```
 
 ## PCB stack-up and rules
 
-- **Layers:** F.Cu and B.Cu for tracks. In1.Cu holds the ground planes and In2.Cu the power planes, one of each per area: GND / +5V (logic), 0V_IO / 24V_IO (field), AGND_ISO / +24VA (analog), GND_485 / +5V_485 (RS-485). The inner layers are plane layers, so Freerouting reaches them with vias.
+- **Layers:** F.Cu, In2.Cu and B.Cu carry tracks. In1.Cu is a plane layer with one ground plane per area: GND (logic), 0V_IO (field), AGND_ISO (analog), GND_485 (RS-485). On In2.Cu the field area is a solid 24V_IO plane, because it carries the outputs' current. In the other areas In2.Cu is also a routing layer: the first route, with both inner layers as planes, left 316 connections unrouted, mostly on the logic bus. Their power pours (+5V, +24VA, +5V_485) are added on In2.Cu after routing, around the tracks, and the power nets are also routed as 0.5 mm tracks.
 - **Gaps:** a keep-out over each 3 mm gap stops any track, via or pour from crossing between areas. Only the bridge parts' bodies span them.
-- **Net classes:** Default 0.2 mm; Supply 0.5 mm; Output (OUT1-16) 0.8 mm; Field (24V_IO, 0V_IO, 24 V input) 1.5 mm; PE 1.0 mm clearance from everything else. JLCPCB 4-layer standard: 0.15 mm minimum track and space, 0.3 mm minimum drill.
+- **Net classes:** Default 0.2 mm; Supply 0.5 mm; Output (OUT1-16) 0.8 mm; Field (24V_IO, 0V_IO, 24 V input) 1.5 mm; PE 1.0 mm clearance from everything else. Freerouting necks some tracks down to 0.1 mm for a fraction of a millimetre between fine-pitch pads, so the board minimum is 0.1 mm (JLCPCB 4-layer: 0.09 mm track, 0.3 mm drill). `mk_pcb.py` also corrects the drill of imported vias: KiCad gives every via its net class drill, so 0.6 mm vias on the OUT nets got 0.5 mm holes.
 - **LMR36520:** its thermal pad gets six 0.3 mm vias to GND from `mk_pcb.py`. The library's thermal-via footprint uses 0.2 mm drills, below JLCPCB's standard.
 
 ## Still to do
@@ -229,8 +229,8 @@ python mk_fab.py --route
 
 It does these steps in order:
 1. `mk_pcb.py` exports `c02io.dsn`.
-2. Freerouting (`%LOCALAPPDATA%reeroutingreerouting.exe`, up to 40 passes, 2 threads) writes `c02io.ses`. Its output also goes to `route_log.txt`.
-3. `mk_pcb.py` rebuilds the board, imports the tracks, and adds a ground pour per area on both outer layers.
+2. Freerouting (`%LOCALAPPDATA%\freerouting\freerouting.exe`, up to 40 passes, 2 threads) writes `c02io.ses`. Its output also goes to `route_log.txt`.
+3. `mk_pcb.py` rebuilds the board, imports the tracks, corrects the via drills, and adds the In2.Cu power pours and a ground pour per area on both outer layers.
 4. KiCad's DRC (errors only) goes to `drc.txt`.
 5. If the DRC is clean, it writes `fab/c02io_gerbers.zip` (4 copper layers).
 

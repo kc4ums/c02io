@@ -9,7 +9,7 @@ Writes:
   c02io.kicad_pcb    4 layers. Parts placed and connected (ratsnest), outline,
                      terminal labels, and per area:
                        In1.Cu  ground plane (GND, 0V_IO, AGND_ISO, GND_485)
-                       In2.Cu  power plane  (+5V, 24V_IO, +24VA, +5V_485)
+                       In2.Cu  routing + power pours (24V_IO plane; +5V, +24VA, +5V_485 poured after routing)
                      Keep-out strips over the 3 mm gaps between the areas:
                      no track, via or copper pour may cross them.
                      After routing, the outer layers get a ground pour per area.
@@ -41,6 +41,10 @@ PLANES = {                      # area: (In1.Cu ground, In2.Cu power)
     'analog': ('AGND_ISO', '+24VA'),
     'rs485': ('GND_485', '+5V_485'),
 }
+# In2.Cu is a routing layer as well as the power pours: only the field area's
+# 24V_IO pour (heavy output current) goes to Freerouting as a plane; the other
+# areas' power pours on In2 are added after routing, around the tracks.
+PLANE_BEFORE_ROUTE = {'field'}
 OUT_NETS = ['OUT%d' % n for n in range(1, 17)]
 WIDE = ['24V_IO', '0V_IO', '24V_RAW', '24V_F', '+24V']
 
@@ -54,14 +58,15 @@ def netclass(name, width, clearance=0.2, via=0.6, drill=0.3, priority=0):
 
 
 def write_project():
-    """JLCPCB 4-layer standard: 0.127 mm track/space (we use 0.2), 0.3 mm drill."""
+    """JLCPCB 4-layer standard: 0.09 mm track, 0.3 mm drill. Tracks are 0.2 mm or
+    more except Freerouting's short 0.1 mm neck-downs at fine-pitch pads."""
     pats = ([{'netclass': 'Supply', 'pattern': n} for n in sorted(board.POWER_NETS - set(WIDE) - {'PE'})]
             + [{'netclass': 'Field', 'pattern': n} for n in WIDE]
             + [{'netclass': 'Output', 'pattern': n} for n in OUT_NETS]
             + [{'netclass': 'PE', 'pattern': 'PE'}])
     pro = {
         'board': {'design_settings': {
-            'rules': {'min_clearance': 0.15, 'min_track_width': 0.15, 'min_via_diameter': 0.5,
+            'rules': {'min_clearance': 0.15, 'min_track_width': 0.1, 'min_via_diameter': 0.5,
                       'min_via_annular_width': 0.1, 'min_through_hole_diameter': 0.3,
                       'min_copper_edge_clearance': 0.3, 'min_hole_clearance': 0.25,
                       'min_hole_to_hole': 0.25, 'min_resolved_spokes': 1,
@@ -191,8 +196,8 @@ def build():
     write_project()
     b = pcbnew.NewBoard(PCB)
     b.SetCopperLayerCount(4)
-    for layer, name in ((pcbnew.In1_Cu, 'In1.Cu'), (pcbnew.In2_Cu, 'In2.Cu')):
-        b.SetLayerType(layer, pcbnew.LT_POWER)
+    b.SetLayerType(pcbnew.In1_Cu, pcbnew.LT_POWER)
+    b.SetLayerType(pcbnew.In2_Cu, pcbnew.LT_MIXED)
     ds = b.GetDesignSettings()
     ds.m_CopperEdgeClearance = MM(0.3)
 
@@ -245,23 +250,46 @@ def build():
             v.SetNet(netinfo['GND'])
             b.Add(v)
 
-    # split planes on the inner layers, one pair per area
+    # split ground planes on In1, one per area; the field area's 24V_IO on In2
     for area, (gnd, pwr) in PLANES.items():
         for rect in board.AREA_RECTS[area]:
             zone(b, pcbnew.In1_Cu, netinfo[gnd], rect)
-            zone(b, pcbnew.In2_Cu, netinfo[pwr], rect)
+            if area in PLANE_BEFORE_ROUTE:
+                zone(b, pcbnew.In2_Cu, netinfo[pwr], rect)
     for rect, name in gaps():
         keepout(b, rect, name)
     labels(b)
     pcbnew.SaveBoard(PCB, b)
 
 
-def outer_pours(b):
-    """After routing: a ground pour per area on both outer layers."""
-    for area, (gnd, _) in PLANES.items():
+def late_pours(b, outer):
+    """The other areas' power pours on In2 and, after routing, a ground pour
+    per area on both outer layers."""
+    for area, (gnd, pwr) in PLANES.items():
         for rect in board.AREA_RECTS[area]:
-            for layer in (pcbnew.F_Cu, pcbnew.B_Cu):
-                zone(b, layer, b.FindNet(gnd), rect)
+            if area not in PLANE_BEFORE_ROUTE:
+                zone(b, pcbnew.In2_Cu, b.FindNet(pwr), rect)
+            if outer:
+                for layer in (pcbnew.F_Cu, pcbnew.B_Cu):
+                    zone(b, layer, b.FindNet(gnd), rect)
+
+
+VIA_DRILL = {0.6: 0.3, 0.8: 0.4, 1.0: 0.5}
+
+
+def tidy_routes(b):
+    """The .ses import gives every via its net class drill whatever its
+    size (0.6 mm vias on OUT nets got 0.5 mm drills). Freerouting also necks
+    some tracks down to 0.1 mm for a fraction of a mm between fine-pitch
+    pads; that is allowed (JLCPCB 4-layer minimum 0.09 mm)."""
+    nv = 0
+    for t in b.GetTracks():
+        if t.Type() == pcbnew.PCB_VIA_T:
+            d = VIA_DRILL.get(round(pcbnew.ToMM(t.GetWidth(pcbnew.F_Cu)), 2))
+            if d and abs(pcbnew.ToMM(t.GetDrillValue()) - d) > 1e-3:
+                t.SetDrill(MM(d))
+                nv += 1
+    print('fixed %d via drills' % nv)
 
 
 def main():
@@ -271,12 +299,15 @@ def main():
         if not pcbnew.ImportSpecctraSES(b, SES):
             raise SystemExit('could not import ' + SES)
         print('imported tracks from', os.path.basename(SES))
-        outer_pours(b)
-    pcbnew.ZONE_FILLER(b).Fill(b.Zones())
-    pcbnew.SaveBoard(PCB, b)
-    if not os.path.exists(SES):
+        tidy_routes(b)
+        late_pours(b, outer=True)
+    else:
+        pcbnew.ZONE_FILLER(b).Fill(b.Zones())
         if not pcbnew.ExportSpecctraDSN(b, DSN):
             raise SystemExit('could not write ' + DSN)
+        late_pours(b, outer=False)
+    pcbnew.ZONE_FILLER(b).Fill(b.Zones())
+    pcbnew.SaveBoard(PCB, b)
     print('%s: %d parts, %d nets, %d pads, %.0f x %.0f mm, 4 layers' % (
         os.path.basename(PCB), len(board.PARTS), len(board.nets()),
         sum(len(v) for v in board.nets().values()), board.BOARD_W, board.BOARD_H))
