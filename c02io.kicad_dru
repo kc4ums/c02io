@@ -1,0 +1,4 @@
+(version 1)
+(rule "pe_clearance"
+  (condition "A.NetName == 'PE' && B.NetName != 'PE'")
+  (constraint clearance (min 1.0)))

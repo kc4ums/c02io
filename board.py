@@ -77,7 +77,7 @@ FP = {
     'SOP16': 'Package_SO:SOP-16_4.4x10.4mm_P1.27mm',        # TLP291-4
     'TSSOP16': 'Package_SO:TSSOP-16_4.4x5mm_P0.65mm',
     'PSSO24': 'Package_SO:ST_PowerSSO-24_SlugDown_ThermalVias',
-    'HSOIC8': 'Package_SO:HSOP-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.1mm_ThermalVias',
+    'HSOIC8': 'Package_SO:HSOP-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.1mm',   # mk_pcb.py adds 0.3 mm thermal vias
     'B05XT': 'c02io:Mornsun_B05_XT-1WR3_SMD',          # project library (to make)
     'SOT23': 'Package_TO_SOT_SMD:SOT-23',
     'SOT89': 'Package_TO_SOT_SMD:SOT-89-3',
@@ -837,7 +837,7 @@ at('R21', 152.0, 61.0)
 at('JP2', 142.0, 61.0, 90)
 at('JP1', 148.0, 57.0, 90)
 # Left edge: reset button, LEDs, PE hole
-at('SW1', 7.0, 54.0, 90)
+at('SW1', 7.0, 53.5, 90)
 at('H1', 4.5, 62.5)
 for _i, (_d, _r) in enumerate((('D3', 'R18'), ('D4', 'R19'), ('D5', 'R20'))):
     at(_d, 12.5, 59.5 + 2.6 * _i)

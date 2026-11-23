@@ -1,5 +1,6 @@
 __pycache__/
 *.dsn
+*.ses.bak
 drc.txt
 fab/
 *.kicad_prl

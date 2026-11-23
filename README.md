@@ -1,6 +1,8 @@
 # C02IO: W65C02S industrial I/O board (design spec)
 
-Status: **netlist written and checked (2026-11-20).** `board.py` has every part, footprint and pin connection; `python check_board.py` passes. Every chip's pin table was checked against its current datasheet (listed at the top of `board.py`). **Placed (2026-11-23):** every part has its position and rotation in `board.py`, and `python check_place.py png` passes (no courtyard overlaps; every part inside its isolated area; every bridge pad on the right side of its gap). `place.png` shows it. The KiCad board and schematic (`mk_pcb.py`, `mk_sch.py`, as in C02COMM at `C:\Projects\mymensch\hardware\c02board`) are next.
+Status: **netlist written and checked (2026-11-20).** `board.py` has every part, footprint and pin connection; `python check_board.py` passes. Every chip's pin table was checked against its current datasheet (listed at the top of `board.py`). **Placed (2026-11-23):** every part has its position and rotation in `board.py`, and `python check_place.py png` passes (no courtyard overlaps; every part inside its isolated area; every bridge pad on the right side of its gap). `place.png` shows it.
+
+**KiCad board built (2026-11-23), not routed:** `mk_pcb.py` writes the 4-layer `c02io.kicad_pcb`. Its pad nets match `board.py` pad for pad, and KiCad's DRC shows no errors besides the 499 connections still to route (plus silkscreen-overlap warnings). The schematic (`mk_sch.py`), routing and `mk_fab.py` are next, as in C02COMM (`C:\Projects\mymensch\hardware\c02board`).
 
 ![placement](place.png)
 
@@ -188,10 +190,26 @@ Phoenix MC 1,5/x-G-3.81 headers go up to 16 pins, so the groups are split:
 | `check_place.py` | Plain Python + matplotlib. Checks the placement and draws `place.png` (`python check_place.py png`). |
 | `mk_fp.py` | Writes the two Mornsun footprints into `c02io.pretty`, from the datasheets' top-view layouts. |
 | `fpgeom.py` | Reads courtyards and pads from the KiCad libraries; prints the `CRT` table in `board.py`. |
+| `mk_pcb.py` | Run with KiCad's Python. Builds `c02io.kicad_pcb` (and the project, rules, `fp-lib-table`): parts, nets, outline, terminal labels, split planes, keep-outs over the gaps. Writes `c02io.dsn` for Freerouting, or imports `c02io.ses` and adds the outer ground pours once routed. |
+
+Regenerate after editing `board.py`:
+
+```
+python check_board.py
+python check_place.py png
+"C:\Program Files\KiCad.0in\python.exe" mk_pcb.py
+```
+
+## PCB stack-up and rules
+
+- **Layers:** F.Cu and B.Cu for tracks. In1.Cu holds the ground planes and In2.Cu the power planes, one of each per area: GND / +5V (logic), 0V_IO / 24V_IO (field), AGND_ISO / +24VA (analog), GND_485 / +5V_485 (RS-485). The inner layers are plane layers, so Freerouting reaches them with vias.
+- **Gaps:** a keep-out over each 3 mm gap stops any track, via or pour from crossing between areas. Only the bridge parts' bodies span them.
+- **Net classes:** Default 0.2 mm; Supply 0.5 mm; Output (OUT1-16) 0.8 mm; Field (24V_IO, 0V_IO, 24 V input) 1.5 mm; PE 1.0 mm clearance from everything else. JLCPCB 4-layer standard: 0.15 mm minimum track and space, 0.3 mm minimum drill.
+- **LMR36520:** its thermal pad gets six 0.3 mm vias to GND from `mk_pcb.py`. The library's thermal-via footprint uses 0.2 mm drills, below JLCPCB's standard.
 
 ## Still to do
 
-- **KiCad board and schematic:** `mk_pcb.py` (4 layers, per-area planes, net classes, JLCPCB rules), `mk_sch.py` (one sheet per block), then routing and `mk_fab.py` (Gerbers, BOM with LCSC numbers, pick-and-place file).
+- **Schematic, routing, fab:** `mk_sch.py` (one sheet per block), routing with Freerouting (run outside Claude Code, as for C02COMM), and `mk_fab.py` (DRC, Gerbers, BOM with LCSC numbers, pick-and-place file).
 - **Datasheet details still open:**
   - **SST39SF010A:** only use the Rev F (May 2025) datasheet. It corrected the PLCC pin table.
   - **CJ78L05 (LCSC C2079):** the pin order (1 OUT, 2 GND, 3 IN) came from a mirror of JSCJ's datasheet; check it against LCSC's copy. The SOT-23 version has a different pinout.
