@@ -1,24 +1,20 @@
-"""C02IO: a W65C02S industrial I/O board (16 DI, 16 DO, 8 AI, 8 AO, RS-485).
+"""C02IO: a Raspberry Pi CM5 industrial I/O board (16 DI, 16 DO, 8 AI, 8 AO, RS-485).
 
 This file is the design: every part, its footprint, roughly where it sits and
-what each pin connects to. check_board.py checks it. Later, mk_pcb.py and
-mk_sch.py (as in C02COMM, C:\\Projects\\mymensch\\hardware\\c02board) will
+what each pin connects to. check_board.py checks it; mk_pcb.py and mk_sch.py
 build the KiCad board and schematic from it.
 
-Memory map (the same layout as C02COMM)
-    $0000-$7EFF  RAM, AS6C62256 (32 KB, the top 256 bytes are I/O)
-    $7F00-$7F0F  VIA   W65C22N   SPI to the analog side, flash bank, output
-                                 enable, watchdog, LEDs, fault inputs
-    $7F10-$7F1F  UART  TL16C2552 A0-A2 = register, A3 = CHSEL:
-                                 $7F10 = channel B (USB header), $7F18 = A (RS-485)
-    $7F20        inputs 1-8   (74HC541, read)
-    $7F30        inputs 9-16  (74HC541, read)
-    $7F40        outputs 1-8  (74HC574, write)
-    $7F50        outputs 9-16 (74HC574, write)
-    $7F60, $7F70 /CS6, /CS7 on the expansion header
-    $8000-$FFFF  flash, SST39SF010A: one of four 32 KB banks (VIA PA6/PA7,
-                 pulled low, so bank 0 at reset). JP1 write-protects it.
-Clock: one 3.6864 MHz oscillator drives PHI2 and the UART's XTAL1.
+Rev B: the W65C02S system (CPU, RAM, flash, VIA, UART, decoding) is replaced
+by a Raspberry Pi Compute Module 5 with gigabit Ethernet and a USB-C port
+(rpiboot flashing). The I/O is unchanged except at its logic end:
+    inputs 1-16    2 x 74HC165 on SPI0, loaded by GPIO6
+    outputs 1-16   2 x 74HC595 on SPI0, latched by CE0 (GPIO8); /OE from the
+                   watchdog (GPIO5 = enable, GPIO4 = kick)
+    analog         SPI1 through the ISO7741 / ISO7720 (ADC CE0, DAC CE2, /LDAC GPIO24)
+    RS-485         UART0 (GPIO14/15), driver enable on RTS (GPIO17)
+    status         /OUT_FLT GPIO22, /FIELD_OK GPIO23, LEDs GPIO12/13
+The logic side runs at 3.3 V from the CM5's own 3.3 V output, so nothing
+drives a CM5 pin while it is unpowered.
 
 Grounds (four isolated areas)
     GND       logic, and the 0 V of the 24 V supply input
@@ -26,15 +22,17 @@ Grounds (four isolated areas)
     AGND_ISO  analog: from the URB2424YMD-6WR3 isolated converter
     GND_485   RS-485 bus side: from the B0505XT-1WR3 isolated converter
 
-Datasheets the pin tables were checked against (2026-11-20):
-    TL16C2552        TI SLWS163A (Jun 2006), FN (PLCC-44)
-    SST39SF010A      Microchip DS20005022F (May 2025), PLCC-32. Rev F
-                     corrected the PLCC pin table: don't use older copies.
-    AS6C62256        Alliance Rev 1.2 (Mar 2016), 28-pin 330 mil SOP
-    DS1813R-10       Maxim DS1813 REV 022306, SOT-23
+Datasheets the pin tables were checked against (2026-11-20, rev B 2026-11-23):
+    CM5              Raspberry Pi CM5 datasheet Release 4 (Nov 2026), Table 4; CM5 IO
+                     board rev 2 schematic and KiCad files (footprints in vendor/cm5io)
+    TRJG0926HENL     as wired on the CM5 IO board (MagJack A70-112-331N126)
+    TYPE-C-31-M-12   HRO drawing Rev A (2020-12-08)
+    USBLC6-2SC6      KiCad symbol (ST usblc6-2.pdf), UMW second-source drawing
+    TPS54560B        TI SLVSF00 (Jan 2019), HSOIC-8 (DDA)
+    74HC165/595      TI SCLS116H / SCLS041J
     VNI4140K         ST Doc ID 14174 Rev 5 (Aug 2009), PowerSSO-24
     TLP291-4         Toshiba Rev 9.0 (2026-10-29), SO16
-    CD74HC123        TI SCHS142F (Oct 2003), SOIC-16
+    CD74HC123        TI SCHS142F (Oct 2003), SOIC-16; K ~0.48 at 3.3 V (Fig. 5): tW ~106 ms
     DAC7568          TI SBAS430F (Apr 2018), TSSOP-16
     REF3040          TI SBVS032K (Dec 2025), SOT-23-3
     ISO7741          TI SLLSEP4K (Aug 2026), SOIC-16 wide
@@ -42,38 +40,32 @@ Datasheets the pin tables were checked against (2026-11-20):
     LM324            TI SLOS066AE (Sep 2025), SOIC-14
     78L05 (SOT-89)   TI SLVS010X, onsemi MC78L00A/D Rev 21, JSCJ CJ78L Rev 3.1:
                      all 1 = OUT, 2 = GND, 3 = IN
-    LMR36520         TI SNVSBF0C (Nov 2025), HSOIC-8 (DDA)
     URB2424YMD-6WR3  Mornsun URB_YMD-6WR3 (2026.09.18)
     B0505XT-1WR3     Mornsun B05_XT-1WR3 (2022.01.08)
     CA-IS3082WX      Chipanalog CA-IS308x V1.08 (2023/11/13), SOIC-16 wide
     SM712            Semtech Rev 6.0 (2017)
     BCX56 / BC847 / BAV99   Nexperia Rev 13 (2023) / Rev 12 (2019) / Rev 8 (2010)
-    74HC00/32/138/541/574   TI SCLS181H / SCLS200F / SCLS107G / SCLS305E / SCLS148H
-    74HC30           TI CD74HC30 SCHS121E (TI has no SN74HC30)
     MCP3208          Microchip, checked in the spec (README)
 """
 
 # ------------------------------------------------------------ footprints
 FP = {
     # through-hole: sockets and connectors, soldered by hand
-    'DIP40': 'Package_DIP:DIP-40_W15.24mm_Socket',
-    'PLCC32S': 'Package_LCC:PLCC-32_THT-Socket',
     'H1x2': 'Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical',
     'H1x3': 'Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical',
-    'H1x6': 'Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical',
     'H2x3': 'Connector_PinHeader_2.54mm:PinHeader_2x03_P2.54mm_Vertical',
-    'H2x16': 'Connector_PinHeader_2.54mm:PinHeader_2x16_P2.54mm_Vertical',
+    'H2x5': 'Connector_PinHeader_2.54mm:PinHeader_2x05_P2.54mm_Vertical',
+    'RJ45': 'c02io:TRJG0926HENL',                     # from the CM5 IO board files
+    'USBC': 'Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12',
     'URB': 'c02io:Mornsun_URB_YMD-6WR3_THT',          # project library (to make)
     'HOLE': 'MountingHole:MountingHole_3.2mm_M3',
     'HOLE_PE': 'MountingHole:MountingHole_3.2mm_M3_Pad',
     # SMD, assembled by JLCPCB
-    'PLCC44': 'Package_LCC:PLCC-44_16.6x16.6mm_P1.27mm',
-    'SOP28': 'Package_SO:SOP-28_8.4x18.16mm_P1.27mm',
+    'CM5': 'c02io:Raspberry-Pi-5-Compute-Module',      # from the CM5 IO board files
     'SO8': 'Package_SO:SOIC-8_3.9x4.9mm_P1.27mm',
     'SO14': 'Package_SO:SOIC-14_3.9x8.7mm_P1.27mm',
     'SO16': 'Package_SO:SOIC-16_3.9x9.9mm_P1.27mm',
     'SO16W': 'Package_SO:SOIC-16W_7.5x10.3mm_P1.27mm',
-    'SO20W': 'Package_SO:SOIC-20W_7.5x12.8mm_P1.27mm',
     'SOP16': 'Package_SO:SOP-16_4.4x10.4mm_P1.27mm',        # TLP291-4
     'TSSOP16': 'Package_SO:TSSOP-16_4.4x5mm_P0.65mm',
     'PSSO24': 'Package_SO:ST_PowerSSO-24_SlugDown_ThermalVias',
@@ -81,7 +73,7 @@ FP = {
     'B05XT': 'c02io:Mornsun_B05_XT-1WR3_SMD',          # project library (to make)
     'SOT23': 'Package_TO_SOT_SMD:SOT-23',
     'SOT89': 'Package_TO_SOT_SMD:SOT-89-3',
-    'OSC': 'Oscillator:Oscillator_SMD_EuroQuartz_XO91-4Pin_7.0x5.0mm',
+    'SOT23-6': 'Package_TO_SOT_SMD:SOT-23-6',
     'R': 'Resistor_SMD:R_0603_1608Metric',
     'R0805': 'Resistor_SMD:R_0805_2012Metric',
     'R1206': 'Resistor_SMD:R_1206_3216Metric',
@@ -92,11 +84,12 @@ FP = {
     'C1210': 'Capacitor_SMD:C_1210_3225Metric',
     'C1808': 'Capacitor_SMD:C_1808_4520Metric',
     'CP10': 'Capacitor_SMD:CP_Elec_10x10.5',
-    'L7028': 'Inductor_SMD:L_Bourns_SRP7028A_7.3x6.6mm',
+    'L1245': 'Inductor_SMD:L_Bourns_SRP1245A',
     'LED': 'LED_SMD:LED_0805_2012Metric',              # pad 1 = K, pad 2 = A
     'SOD123': 'Diode_SMD:D_SOD-123',                    # pad 1 = K, pad 2 = A
     'SMA': 'Diode_SMD:D_SMA',                           # pad 1 = K, pad 2 = A
     'SMB': 'Diode_SMD:D_SMB',                           # pad 1 = K, pad 2 = A
+    'SMC': 'Diode_SMD:D_SMC',                           # pad 1 = K, pad 2 = A
     'F1206': 'Fuse:Fuse_1206_3216Metric',
     'F1812': 'Fuse:Fuse_1812_4532Metric',
     'SW': 'Button_Switch_SMD:SW_SPST_B3S-1000',
@@ -106,11 +99,10 @@ for _n in (3, 8, 9, 10, 12):
                        % (_n, _n))
 
 # Pins per footprint, for the "every pin listed" check
-NPINS = {'DIP40': 40, 'PLCC32S': 32, 'PLCC44': 44, 'SOP28': 28, 'SO8': 8, 'SO14': 14,
-         'SO16': 16, 'SO16W': 16, 'SO20W': 20, 'SOP16': 16, 'TSSOP16': 16, 'PSSO24': 25,
-         'HSOIC8': 9, 'SOT23': 3, 'SOT89': 3, 'OSC': 4}
+NPINS = {'CM5': 200, 'SO8': 8, 'SO14': 14, 'SO16': 16, 'SO16W': 16, 'SOP16': 16, 'TSSOP16': 16,
+         'PSSO24': 25, 'HSOIC8': 9, 'SOT23': 3, 'SOT23-6': 6, 'SOT89': 3}
 
-BOARD_W, BOARD_H = 230.0, 147.0
+BOARD_W, BOARD_H = 230.0, 157.0
 
 PARTS = []          # dicts: ref, value, fp, x, y, rot, pins {pad: net}, mpn, note, dnp
 
@@ -135,211 +127,172 @@ def decouple(ref, x, y, vcc='+5V', gnd='GND', value='100nF', fp='C'):
 # Positions below are rough (mm from the top-left corner), grouped by area,
 # so the parts start out in the right isolation area. Real placement comes
 # with mk_pcb.py.
-#   y   0-38   field digital (0V_IO): terminals along the top edge
-#   y  40-82   logic (GND); power input on the left edge
-#   y  84-120  analog (AGND_ISO), x 0-160: terminals along the bottom edge
-#   y  84-120  RS-485 (GND_485), x 165-200
+#   y   0-45   field digital (0V_IO): terminals along the top edge
+#   y  48-105  logic (GND): CM5, Ethernet and USB-C on the right edge,
+#              power input on the left edge
+#   y 108-157  analog (AGND_ISO): terminals along the bottom edge
+#   y 108-157  RS-485 (GND_485), bottom right
 
-# ============================================================ CPU and memory
-# W65C02S (DIP-40, socket): the same pins as C02COMM. RDY pulled up (WAI),
-# BE (36) and SOB (38) high.
-part('U1', 'W65C02S6TPG-14', 'DIP40', 30, 60, pins={
-    1: None, 2: 'RDY', 3: None, 4: '~{IRQ}', 5: None, 6: '~{NMI}', 7: None, 8: '+5V',
-    9: 'A0', 10: 'A1', 11: 'A2', 12: 'A3', 13: 'A4', 14: 'A5', 15: 'A6', 16: 'A7',
-    17: 'A8', 18: 'A9', 19: 'A10', 20: 'A11', 21: 'GND', 22: 'A12', 23: 'A13', 24: 'A14',
-    25: 'A15', 26: 'D7', 27: 'D6', 28: 'D5', 29: 'D4', 30: 'D3', 31: 'D2', 32: 'D1',
-    33: 'D0', 34: 'RW', 35: None, 36: '+5V', 37: 'PHI2', 38: '+5V', 39: None, 40: '~{RES}'},
-    mpn='WDC W65C02S6TPG-14', note='40-pin socket')
+# ============================================================ Compute Module 5
+# Raspberry Pi CM5 on two Amphenol 10164227-1001A1RLF (1.5 mm stack). Pin
+# numbers from the CM5 datasheet (Release 4, Table 4 pp.17-22) and the CM5 IO
+# board schematic and KiCad files (revision 2). Unused pins are left open:
+# GPIO0/1 (HAT ID), SD (Lite only), PCIe, MIPI, HDMI, USB 3, fan, CC1/CC2,
+# PMIC_Enable, EEPROM_nWP, WL/BT_nDisable, VBAT (no RTC battery).
+CM5_GND = (1, 2, 7, 8, 13, 14, 22, 23, 32, 33, 42, 43, 52, 53, 59, 60, 65, 66, 71, 74, 98,
+           107, 108, 113, 114, 119, 120, 125, 126, 131, 132, 137, 138, 144, 150, 155, 156, 161,
+           162, 167, 168, 173, 174, 179, 180, 185, 186, 191, 192, 197, 198)
+CM5_GPIO = {0: 36, 1: 35, 2: 58, 3: 56, 4: 54, 5: 34, 6: 30, 7: 37, 8: 39, 9: 40, 10: 44, 11: 38,
+            12: 31, 13: 28, 14: 55, 15: 51, 16: 29, 17: 50, 18: 49, 19: 26, 20: 27, 21: 25,
+            22: 46, 23: 47, 24: 45, 25: 41, 26: 24, 27: 48}
+# GPIO use (RP1 alternate functions, CM5 datasheet Table 1 pp.11-12):
+#   SPI0 (a0)  shift registers: 11 SCLK, 10 MOSI -> 74HC595 chain, 9 MISO <- 74HC165
+#              chain, 8 CE0 = 74HC595 latch (rises at the end of the transfer)
+#   SPI1 (a0)  analog side through the ISO7741/ISO7720: 21 SCLK, 20 MOSI, 19 MISO,
+#              18 CE0 = ADC /CS, 16 CE2 = DAC /SYNC
+#   UART0 (a4) RS-485: 14 TX, 15 RX, 17 RTS = driver enable (Linux RS-485 mode,
+#              set so the pin is high while sending)
+#   4 watchdog kick, 5 output enable, 6 input load (/PL), 12 RUN LED, 13 FAULT LED,
+#   22 /OUT_FLT in, 23 /FIELD_OK in, 24 DAC /LDAC
+#   2/3 (I2C1, 1.8k pull-ups on the module), 7, 25, 26, 27 to the expansion header
+GPIO_USE = {2: 'GPIO2_SDA', 3: 'GPIO3_SCL', 4: 'WD_KICK', 5: 'OUT_EN', 6: '~{DI_LOAD}',
+            7: 'GPIO7', 8: 'SR_LATCH', 9: 'SR_MISO', 10: 'SR_MOSI', 11: 'SR_SCLK',
+            12: 'LED_RUN', 13: 'LED_FAULT', 14: 'UA_TX', 15: 'UA_RX', 16: '~{DAC_SYNC}',
+            17: 'DIR485', 18: '~{ADC_CS}', 19: 'SPI_MISO', 20: 'SPI_MOSI', 21: 'SPI_SCLK',
+            22: '~{OUT_FLT}', 23: '~{FIELD_OK}', 24: '~{DAC_LDAC}', 25: 'GPIO25', 26: 'GPIO26',
+            27: 'GPIO27'}
+CM5_PINS = {k: None for k in range(1, 201)}
+CM5_PINS.update({k: 'GND' for k in CM5_GND})
+CM5_PINS.update({k: '+5V' for k in (77, 79, 81, 83, 85, 87)})       # 5 V in, 4.75-5.25 V
+CM5_PINS.update({84: '+3V3', 86: '+3V3', 78: '+3V3'})               # 3.3 V out (600 mA), GPIO_VREF
+CM5_PINS.update({CM5_GPIO[g]: n for g, n in GPIO_USE.items()})
+CM5_PINS.update({
+    12: 'ETH0_P', 10: 'ETH0_N', 4: 'ETH1_P', 6: 'ETH1_N', 11: 'ETH2_P', 9: 'ETH2_N',
+    3: 'ETH3_P', 5: 'ETH3_N', 15: 'ETH_NLED3', 17: 'ETH_NLED2',
+    21: 'LED_NACT', 92: '~{PWR_BUT}', 93: '~{RPIBOOT}', 103: 'USB_DN', 105: 'USB_DP'})
+part('U1', 'CM5', 'CM5', 0, 0, pins=CM5_PINS,
+     mpn='Raspberry Pi CM5 (any RAM/eMMC/wireless option)',
+     note='on 2 x Amphenol 10164227-1001A1RLF; M2.5 spacers to suit the 1.5 mm stack')
+two('C11', '10uF', 'C0805', 0, 0, '+3V3', 'GND', note='CM5 3.3 V out')
+two('C12', '22uF 16V', 'C1210', 0, 0, '+5V', 'GND', note='near the CM5 5 V pins, X7R')
+two('C13', '22uF 16V', 'C1210', 0, 0, '+5V', 'GND', note='X7R')
 
-# AS6C62256 32K x 8 SRAM, 28-pin 330 mil SOP (same pinout as the PDIP)
-part('U2', 'AS6C62256-55SCN', 'SOP28', 50, 60, pins={
-    1: 'A14', 2: 'A12', 3: 'A7', 4: 'A6', 5: 'A5', 6: 'A4', 7: 'A3', 8: 'A2', 9: 'A1', 10: 'A0',
-    11: 'D0', 12: 'D1', 13: 'D2', 14: 'GND', 15: 'D3', 16: 'D4', 17: 'D5', 18: 'D6', 19: 'D7',
-    20: '~{RAMCS}', 21: 'A10', 22: '~{RD}', 23: 'A11', 24: 'A9', 25: 'A8', 26: 'A13',
-    27: '~{WR}', 28: '+5V'}, mpn='Alliance AS6C62256-55SCN')
+# Ethernet: TRXCOM TRJG0926HENL gigabit MagJack (footprint from the CM5 IO
+# board), wired as there: PHY-side centre taps (4, 5) to 100 nF only; line-side
+# taps (11-14, PoE) open; LED anodes to 3.3 V, cathodes through 470R to nLED3
+# (green, activity) and nLED2 (yellow, speed). Shield to GND.
+# Pairs: 100 ohm differential, P/N matched to 0.15 mm.
+part('J12', 'ETHERNET', 'RJ45', 0, 0, pins={
+    1: 'ETH0_P', 2: 'ETH0_N', 3: 'ETH1_P', 6: 'ETH1_N', 7: 'ETH2_P', 8: 'ETH2_N',
+    9: 'ETH3_P', 10: 'ETH3_N', 4: 'ETH_CT', 5: 'ETH_CT', 11: None, 12: None, 13: None, 14: None,
+    15: '+3V3', 16: 'ETH_LY_K', 17: '+3V3', 18: 'ETH_LG_K', 19: 'GND', 20: 'GND'},
+    mpn='TRXCOM TRJG0926HENL', note='as on the CM5 IO board; through-hole, hand-soldered')
+two('C70', '100nF', 'C', 0, 0, 'ETH_CT', 'GND', note='MagJack PHY-side centre taps')
+two('R25', '470', 'R', 0, 0, 'ETH_NLED3', 'ETH_LG_K', note='green LED (activity)')
+two('R26', '470', 'R', 0, 0, 'ETH_NLED2', 'ETH_LY_K', note='yellow LED (speed)')
 
-# SST39SF010A 128K x 8 flash, PLCC-32 in a through-hole socket.
-# PLCC numbering = PDIP numbering (DS20005022F). FA15/FA16 = bank select.
-part('U3', 'SST39SF010A-70-4C-NHE', 'PLCC32S', 66, 60, pins={
-    1: None, 2: 'FA16', 3: 'FA15', 4: 'A12', 5: 'A7', 6: 'A6', 7: 'A5', 8: 'A4', 9: 'A3',
-    10: 'A2', 11: 'A1', 12: 'A0', 13: 'D0', 14: 'D1', 15: 'D2', 16: 'GND', 17: 'D3', 18: 'D4',
-    19: 'D5', 20: 'D6', 21: 'D7', 22: '~{ROMCS}', 23: 'A10', 24: '~{RD}', 25: 'A11', 26: 'A9',
-    27: 'A8', 28: 'A13', 29: 'A14', 30: None, 31: '~{FWE}', 32: '+5V'},
-    mpn='Microchip SST39SF010A-70-4C-NHE', note='PLCC-32 through-hole socket')
+# USB-C (USB 2.0 device: rpiboot flashing and gadget console). The board is
+# powered from 24 V, so VBUS is NOT joined to +5V (it would feed the host): it
+# only reaches the ESD part and 100 nF. Rd 5.1k on CC1 and CC2 so the host turns
+# VBUS on. USB_OTG_ID left open (device). Pairs: 90 ohm differential.
+part('J13', 'USB-C', 'USBC', 0, 0, pins={
+    'A1': 'GND', 'B12': 'GND', 'B1': 'GND', 'A12': 'GND', 'A4': 'USB_VBUS', 'B9': 'USB_VBUS',
+    'B4': 'USB_VBUS', 'A9': 'USB_VBUS', 'A5': 'USB_CC1', 'B5': 'USB_CC2', 'A6': 'USB_DP',
+    'B6': 'USB_DP', 'A7': 'USB_DN', 'B7': 'USB_DN', 'A8': None, 'B8': None, 'SH': 'GND'},
+    mpn='Korean Hroparts TYPE-C-31-M-12 (LCSC C165948)')
+two('R27', '5.1k', 'R', 0, 0, 'USB_CC1', 'GND', note='Rd')
+two('R28', '5.1k', 'R', 0, 0, 'USB_CC2', 'GND', note='Rd')
+two('C71', '100nF', 'C', 0, 0, 'USB_VBUS', 'GND')
+part('U51', 'USBLC6-2SC6', 'SOT23-6', 0, 0, pins={
+    1: 'USB_DP', 2: 'GND', 3: 'USB_DN', 4: 'USB_DN', 5: 'USB_VBUS', 6: 'USB_DP'},
+    mpn='ST USBLC6-2SC6 (LCSC C7519)', note='1/6 = line 1, 3/4 = line 2, 2 GND, 5 VBUS')
 
-# ============================================================ VIA
-# W65C22N (open-drain IRQ, wire-ORed with the UART's interrupt transistors).
-# CS1 (24) high, CS2B (23) = /CS0.
-#   PA0 SCLK, PA1 MOSI, PA2 MISO, PA3 ADC /CS, PA4 DAC /SYNC, PA5 DAC /LDAC,
-#   PA6/PA7 flash bank. PB0 output enable, PB1 watchdog kick, PB2/PB3 RUN/FAULT
-#   LEDs, PB4 output fault (low = fault), PB5 field power (low = present),
-#   PB6, PB7, CA1, CA2, CB1, CB2 to the expansion header.
-part('U4', 'W65C22N6TPG-14', 'DIP40', 84, 60, pins={
-    1: 'GND', 2: 'SPI_SCLK', 3: 'SPI_MOSI', 4: 'SPI_MISO', 5: '~{ADC_CS}', 6: '~{DAC_SYNC}',
-    7: '~{DAC_LDAC}', 8: 'FA15', 9: 'FA16', 10: 'OUT_EN', 11: 'WD_KICK', 12: 'LED_RUN',
-    13: 'LED_FAULT', 14: '~{OUT_FLT}', 15: '~{FIELD_OK}', 16: 'V_PB6', 17: 'V_PB7',
-    18: 'V_CB1', 19: 'V_CB2', 20: '+5V', 21: '~{IRQ}', 22: 'RW', 23: '~{CS0}', 24: '+5V',
-    25: 'PHI2', 26: 'D7', 27: 'D6', 28: 'D5', 29: 'D4', 30: 'D3', 31: 'D2', 32: 'D1', 33: 'D0',
-    34: '~{RES}', 35: 'A3', 36: 'A2', 37: 'A1', 38: 'A0', 39: 'V_CA2', 40: 'V_CA1'},
-    mpn='WDC W65C22N6TPG-14 (N = open-drain IRQ)', note='40-pin socket; must be the N version')
+# Boot and power: JP1 fitted at power-up = USB boot (rpiboot); SW1 = CM5
+# power button (press to start after a shutdown, hold 5 s to force off).
+two('JP1', 'RPIBOOT', 'H1x2', 0, 0, '~{RPIBOOT}', 'GND', note='fit, then power up, to flash eMMC')
+two('SW1', 'POWER', 'SW', 0, 0, '~{PWR_BUT}', 'GND', mpn='Omron B3S-1000',
+    note='footprint pads 1 and 2 each appear twice')
+two('D8', 'ACT', 'LED', 0, 0, 'ACT_K', '+3V3', mpn='0805 LED, green')
+two('R24', '1k', 'R', 0, 0, 'ACT_K', 'LED_NACT', note='CM5 activity LED (open drain)')
+two('R29', '10k', 'R', 0, 0, 'DIR485', 'GND', note='RS-485 driver off while GPIO17 floats')
 
-# ============================================================ UART
-# TL16C2552 dual UART, PLCC-44 (SLWS163A). One /CS for both channels;
-# CHSEL = A3 (1 = channel A, 0 = channel B). RESET is active high.
-# INTA/INTB are active high and 3-state until MCR OUT2 = 1, so each drives
-# /IRQ through an NPN (Q1, Q2) with a pull-down on the INT line.
-# MFA/MFB, TXRDY and DTR unused. Channel A modem inputs tied inactive
-# (/CTSA active); channel B's /CTS comes from the USB header.
-part('U5', 'TL16C2552FN', 'PLCC44', 104, 60, pins={
-    1: None, 2: 'D0', 3: 'D1', 4: 'D2', 5: 'D3', 6: 'D4', 7: 'D5', 8: 'D6', 9: 'D7',
-    10: 'A0', 11: 'UART_CLK', 12: 'GND', 13: None, 14: 'A1', 15: 'A2', 16: 'A3',
-    17: 'UB_INT', 18: '~{CS1}', 19: None, 20: '~{WR}', 21: 'RES', 22: 'GND',
-    23: 'SER_RTS', 24: '~{RD}', 25: 'SER_RX', 26: 'SER_TX', 27: None, 28: 'SER_CTS',
-    29: '+5V', 30: '+5V', 31: '+5V', 32: None, 33: '+5V', 34: 'UA_INT', 35: None,
-    36: '~{UA_RTS}', 37: None, 38: 'UA_TX', 39: 'UA_RX', 40: 'GND', 41: '+5V', 42: '+5V',
-    43: '+5V', 44: '+5V'}, mpn='TI TL16C2552FN',
-    note='XTAL1 driven by the 3.6864 MHz oscillator; XTAL2 open')
-for i, (ch, x) in enumerate((('UA', 116), ('UB', 122))):
-    q = 'Q%d' % (i + 1)
-    part(q, 'BC847', 'SOT23', x, 52, pins={1: ch + '_INTB', 2: 'GND', 3: '~{IRQ}'},
-         mpn='Nexperia BC847 (1 B, 2 E, 3 C)')
-    two('R%d' % (1 + i), '10k', 'R', x, 46, ch + '_INT', ch + '_INTB', note='base resistor')
-    two('R%d' % (3 + i), '100k', 'R', x, 48, ch + '_INT', 'GND', note='INT is 3-state until OUT2 = 1')
-
-# ============================================================ glue logic
-# U6 74HC00: ~ROMCS = /A15, NRW = /RW, ~RD = NAND(PHI2,RW), ~WR = NAND(PHI2,NRW)
-part('U6', '74HC00', 'SO14', 30, 76, pins={
-    1: 'A15', 2: 'A15', 3: '~{ROMCS}', 4: 'RW', 5: 'RW', 6: 'NRW', 7: 'GND',
-    8: '~{RD}', 9: 'PHI2', 10: 'RW', 11: '~{WR}', 12: 'PHI2', 13: 'NRW', 14: '+5V'},
-    mpn='TI SN74HC00DR')
-# U7 74HC00: ~RAMCS = NAND(~ROMCS, ~IOSEL); ~OUT_OE = NAND(OUT_EN, WDOK);
-#            RES = /~RES (UART reset); DIR485 = /~UA_RTS (RS-485 DE and /RE)
-part('U7', '74HC00', 'SO14', 40, 76, pins={
-    1: '~{ROMCS}', 2: '~{IOSEL}', 3: '~{RAMCS}', 4: 'OUT_EN', 5: 'WDOK', 6: '~{OUT_OE}',
-    7: 'GND', 8: 'RES', 9: '~{RES}', 10: '~{RES}', 11: 'DIR485', 12: '~{UA_RTS}',
-    13: '~{UA_RTS}', 14: '+5V'}, mpn='TI SN74HC00DR')
-# U8 74HC30: ~IOSEL low for $7Fxx (A8-A14 = 1, ~ROMCS = 1 i.e. A15 = 0).
-# Pins 9, 10, 13 are not connected inside (CD74HC30).
-part('U8', '74HC30', 'SO14', 50, 76, pins={
-    1: 'A8', 2: 'A9', 3: 'A10', 4: 'A11', 5: 'A12', 6: 'A13', 7: 'GND', 8: '~{IOSEL}',
-    9: None, 10: None, 11: 'A14', 12: '~{ROMCS}', 13: None, 14: '+5V'},
-    mpn='TI CD74HC30M96')
-# U9 74HC138: 16-byte selects in $7F00-$7F7F (A7 = 0)
-part('U9', '74HC138', 'SO16', 60, 76, pins={
-    1: 'A4', 2: 'A5', 3: 'A6', 4: '~{IOSEL}', 5: 'A7', 6: '+5V', 7: '~{CS7}', 8: 'GND',
-    9: '~{CS6}', 10: '~{CS5}', 11: '~{CS4}', 12: '~{CS3}', 13: '~{CS2}', 14: '~{CS1}',
-    15: '~{CS0}', 16: '+5V'}, mpn='TI SN74HC138DR')
-# U10 74HC32: output latch clocks = OR(/CSn, /WR): rising edge at the end of the write
-part('U10', '74HC32', 'SO14', 70, 76, pins={
-    1: '~{CS4}', 2: '~{WR}', 3: 'OCLK1', 4: '~{CS5}', 5: '~{WR}', 6: 'OCLK2', 7: 'GND',
-    8: None, 9: 'GND', 10: 'GND', 11: None, 12: 'GND', 13: 'GND', 14: '+5V'},
-    mpn='TI SN74HC32DR')
+# Expansion header (3.3 V logic): I2C1 and four spare GPIOs
+part('J11', 'EXPANSION', 'H2x5', 0, 0, pins={
+    1: '+3V3', 2: '+5V', 3: 'GPIO2_SDA', 4: 'GND', 5: 'GPIO3_SCL', 6: 'GPIO25', 7: 'GPIO26',
+    8: 'GPIO27', 9: 'GND', 10: 'GPIO7'}, note='3V3 5V SDA GND SCL 25 26 27 GND 7')
 
 # ============================================================ watchdog
-# CD74HC123 half 1: B (rising edge, /A low) retriggers from VIA PB1. /R = /RES,
-# so Q (WDOK) is low through reset; PB1 is pulled low so the release of /R
-# can't trigger it. tW = 0.45 * Rx * Cx = 0.45 * 100k * 2.2uF = ~100 ms
+# CD74HC123 half 1 at 3.3 V: B (rising edge, /A low) retriggers from GPIO4.
+# /R = OUT_EN (GPIO5): while it is low, /Q is high and the 74HC595 outputs are
+# off. /Q low (= triggered) enables them, so the outputs work only while
+# software sets OUT_EN AND keeps kicking. GPIO4 is pulled low so the release of
+# /R can't trigger it. tW = 0.45 * Rx * Cx = 0.45 * 100k * 2.2uF = ~100 ms
 # (less with the capacitor's DC-bias loss: kick it at least every 25 ms).
 # Half 2 unused: /A high, B low, /R low.
-part('U11', 'CD74HC123', 'SO16', 80, 76, pins={
-    1: 'GND', 2: 'WD_KICK', 3: '~{RES}', 4: None, 5: None, 6: 'GND', 7: 'GND', 8: 'GND',
-    9: '+5V', 10: 'GND', 11: 'GND', 12: None, 13: 'WDOK', 14: 'WD_CX', 15: 'WD_RC', 16: '+5V'},
+part('U11', 'CD74HC123', 'SO16', 0, 0, pins={
+    1: 'GND', 2: 'WD_KICK', 3: 'OUT_EN', 4: '~{OUT_OE}', 5: None, 6: 'GND', 7: 'GND', 8: 'GND',
+    9: '+3V3', 10: 'GND', 11: 'GND', 12: None, 13: None, 14: 'WD_CX', 15: 'WD_RC', 16: '+3V3'},
     mpn='TI CD74HC123M96')
-two('R5', '100k', 'R', 80, 70, '+5V', 'WD_RC', note='watchdog Rx')
-two('C5', '2.2uF', 'C1206', 84, 70, 'WD_RC', 'WD_CX', note='watchdog Cx, X7R 25 V')
-two('R6', '10k', 'R', 88, 70, 'WD_KICK', 'GND', note='PB1 low while the VIA is in reset')
-two('R7', '10k', 'R', 90, 70, 'OUT_EN', 'GND', note='PB0 low: outputs off until software sets it')
+decouple('C14', 0, 0, '+3V3')
+two('R5', '100k', 'R', 0, 0, '+3V3', 'WD_RC', note='watchdog Rx')
+two('C5', '2.2uF', 'C1206', 0, 0, 'WD_RC', 'WD_CX', note='watchdog Cx, X7R 25 V')
+two('R6', '10k', 'R', 0, 0, 'WD_KICK', 'GND', note='GPIO4 low while the CM5 boots')
+two('R7', '10k', 'R', 0, 0, 'OUT_EN', 'GND', note='GPIO5 low: outputs off until software sets it')
 
-# ============================================================ clock and reset
-part('X1', '3.6864MHz', 'OSC', 96, 76, pins={1: '+5V', 2: 'GND', 3: 'CLK_X', 4: '+5V'},
-     mpn='5 V HCMOS oscillator, 7 x 5 mm 4-pad', note='pad 1 = OE/EN (tied high), 2 GND, 3 OUT, 4 VDD; check against the part bought')
-two('R8', '33', 'R', 100, 72, 'CLK_X', 'PHI2', note='PHI2 series termination, at X1')
-two('R9', '33', 'R', 100, 80, 'CLK_X', 'UART_CLK', note='UART clock series termination')
+# SPI chip selects held inactive while the GPIOs are inputs
+two('R15', '10k', 'R', 0, 0, '+3V3', '~{ADC_CS}')
+two('R16', '10k', 'R', 0, 0, '+3V3', '~{DAC_SYNC}')
+two('R17', '10k', 'R', 0, 0, '+3V3', '~{DAC_LDAC}')
 
-# DS1813R-10: open drain, internal pull-up, 150 ms; SW1 pulls /RES low too
-part('U12', 'DS1813R-10', 'SOT23', 110, 76, pins={1: '~{RES}', 2: '+5V', 3: 'GND'},
-     mpn='Analog Devices DS1813R-10+T&R (1 RST, 2 VCC, 3 GND)')
-two('SW1', 'RESET', 'SW', 116, 78, '~{RES}', 'GND', mpn='Omron B3S-1000',
-    note='footprint pads 1 and 2 each appear twice')
-two('R10', '3.3k', 'R', 120, 72, '+5V', '~{NMI}')
-two('R11', '3.3k', 'R', 120, 74, '+5V', '~{IRQ}')
-two('R12', '3.3k', 'R', 120, 76, '+5V', 'RDY')
-
-# Flash: JP1 1-2 = writable, 2-3 = protected; bank 0 at reset
-part('JP1', 'FLASH WE', 'H1x3', 126, 72, pins={1: '~{WR}', 2: '~{FWE}', 3: '+5V'},
-     note='1-2 write, 2-3 protect')
-two('R13', '10k', 'R', 130, 72, 'FA15', 'GND', note='bank 0 at reset')
-two('R14', '10k', 'R', 130, 74, 'FA16', 'GND')
-
-# SPI chip selects held inactive while the VIA pins are inputs
-two('R15', '10k', 'R', 130, 76, '+5V', '~{ADC_CS}')
-two('R16', '10k', 'R', 130, 78, '+5V', '~{DAC_SYNC}')
-two('R17', '10k', 'R', 130, 80, '+5V', '~{DAC_LDAC}')
-
-# RUN / FAULT LEDs on PB2 / PB3 (lit when high), power LED
+# RUN / FAULT LEDs on GPIO12 / GPIO13 (lit when high), power LED on +5V
 for i, (net, col) in enumerate((('LED_RUN', 'green'), ('LED_FAULT', 'red'))):
-    two('D%d' % (3 + i), 'RUN' if i == 0 else 'FAULT', 'LED', 136 + 4 * i, 76,
+    two('D%d' % (3 + i), 'RUN' if i == 0 else 'FAULT', 'LED', 0, 0,
         'NL%d' % i, net, mpn='0805 LED, ' + col)
-    two('R%d' % (18 + i), '1k', 'R', 136 + 4 * i, 80, 'NL%d' % i, 'GND')
-two('D5', 'PWR', 'LED', 144, 76, 'NLP', '+5V', mpn='0805 LED, green')
-two('R20', '1k', 'R', 144, 80, 'NLP', 'GND')
-
-# ============================================================ USB serial (UART channel B)
-# 6-pin FTDI header: GND CTS VCC TXD RXD RTS (module's view)
-part('J10', 'USB-SERIAL', 'H1x6', 150, 60, pins={
-    1: 'GND', 2: 'SER_RTS', 3: 'USB_5V', 4: 'SER_RX', 5: 'SER_TX', 6: 'SER_CTS'},
-    note='GND CTS VCC TXD RXD RTS, 5 V TTL module')
-two('R21', '10k', 'R', 154, 66, 'SER_CTS', 'GND', note='/CTS active without a module')
-two('JP2', 'USB PWR', 'H1x2', 154, 70, 'USB_5V', '+5V',
-    note='bench use only: fit only when nothing is on the 24 V input')
-
-# ============================================================ expansion header
-EXP = {1: '+5V', 2: 'GND', 3: 'D0', 4: 'D1', 5: 'D2', 6: 'D3', 7: 'D4', 8: 'D5', 9: 'D6',
-       10: 'D7', 11: 'A0', 12: 'A1', 13: 'A2', 14: 'A3', 15: 'RW', 16: 'PHI2', 17: '~{RD}',
-       18: '~{WR}', 19: '~{IRQ}', 20: '~{RES}', 21: '~{CS6}', 22: '~{CS7}', 23: 'V_PB6',
-       24: 'V_PB7', 25: 'V_CA1', 26: 'V_CA2', 27: 'V_CB1', 28: 'V_CB2', 29: '~{NMI}',
-       30: 'GND', 31: '+5V', 32: 'GND'}
-part('J11', 'EXPANSION', 'H2x16', 170, 60, rot=90, pins=EXP,
-     note='+5V GND D0-D7 A0-A3 RW PHI2 /RD /WR /IRQ /RES /CS6 /CS7 PB6 PB7 CA1 CA2 CB1 CB2 /NMI')
+    two('R%d' % (18 + i), '680', 'R', 0, 0, 'NL%d' % i, 'GND', note='~2 mA from 3.3 V')
+two('D5', 'PWR', 'LED', 0, 0, 'NLP', '+5V', mpn='0805 LED, green')
+two('R20', '1k', 'R', 0, 0, 'NLP', 'GND')
 
 # ============================================================ power input
-# 24 V (18-32 V) -> 2 A fuse -> SS34 -> SMBJ33A -> +24V (logic-side raw supply)
-part('J1', '24V IN', 'TB3', 4, 50, rot=270, pins={1: '24V_RAW', 2: 'GND', 3: 'PE'},
+# 24 V (18-32 V) -> 3 A fuse -> SS54 -> SMBJ33A -> +24V (logic-side raw supply)
+part('J1', '24V IN', 'TB3', 0, 0, pins={1: '24V_RAW', 2: 'GND', 3: 'PE'},
      note='1 = +24 V, 2 = 0 V, 3 = PE')
-two('F1', '2A', 'F1206', 10, 46, '24V_RAW', '24V_F', note='fast fuse')
-two('D1', 'SS34', 'SMA', 10, 50, '+24V', '24V_F', note='reverse polarity (K = +24V)')
-two('D2', 'SMBJ33A', 'SMB', 10, 54, '+24V', 'GND', note='TVS')
-two('C1', '100uF 50V', 'CP10', 16, 46, '+24V', 'GND')
-two('C2', '1nF 2kV', 'C1808', 4, 60, 'PE', 'GND', note='PE to logic 0 V')
+two('F1', '3A', 'F1206', 0, 0, '24V_RAW', '24V_F', note='fast fuse')
+two('D1', 'SS54', 'SMB', 0, 0, '+24V', '24V_F', note='reverse polarity, 5 A (K = +24V)')
+two('D2', 'SMBJ33A', 'SMB', 0, 0, '+24V', 'GND', note='TVS')
+two('C1', '100uF 50V', 'CP10', 0, 0, '+24V', 'GND')
+two('C2', '1nF 2kV', 'C1808', 0, 0, 'PE', 'GND', note='PE to logic 0 V')
 
-# LMR36520ADDAR (SNVSBF0C Design 1: 24 V -> 5 V / 2 A, 400 kHz). Adjustable
-# only: FB = 1 V from 100k / 24.9k. EN to VIN. PG unused. Pad 9 = thermal, GND.
-part('U13', 'LMR36520ADDAR', 'HSOIC8', 16, 56, pins={
-    1: 'GND', 2: '+24V', 3: '+24V', 4: None, 5: 'BUCK_FB', 6: 'BUCK_VCC', 7: 'BUCK_BOOT',
-    8: 'BUCK_SW', 9: 'GND'}, mpn='TI LMR36520ADDAR')
-two('C3', '4.7uF 50V', 'C1210', 20, 52, '+24V', 'GND', note='X7R, at VIN')
-two('C4', '4.7uF 50V', 'C1210', 24, 52, '+24V', 'GND', note='X7R')
-two('C6', '220nF 100V', 'C0805', 20, 50, '+24V', 'GND', note='closest to VIN/PGND')
-two('C7', '100nF', 'C', 22, 58, 'BUCK_BOOT', 'BUCK_SW', note='BOOT, 16 V+')
-two('C8', '1uF', 'C', 22, 60, 'BUCK_VCC', 'GND', note='VCC LDO, 16 V')
-two('L1', '10uH', 'L7028', 22, 64, 'BUCK_SW', '+5V', mpn='Bourns SRP7028A-100M',
-    note='Isat above the LMR36520 current limit')
-two('R22', '100k', 'R', 26, 58, '+5V', 'BUCK_FB', note='RFBT, 1 %')
-two('R23', '24.9k', 'R', 26, 60, 'BUCK_FB', 'GND', note='RFBB, 1 %')
-two('C9', '22uF 16V', 'C1210', 28, 64, '+5V', 'GND', note='X7R')
-two('C10', '22uF 16V', 'C1210', 28, 68, '+5V', 'GND', note='X7R')
-
-# Logic decoupling, one 100 nF per chip (U1-U12, X1)
-for _i, (_x, _y) in enumerate(((36, 50), (54, 50), (70, 50), (90, 50), (110, 50), (34, 82),
-                               (44, 82), (54, 82), (64, 82), (74, 82), (84, 82), (96, 82))):
-    decouple('C%d' % (11 + _i), _x, _y)            # C11-C22
-decouple('C23', 110, 82, value='10uF', fp='C0805')
+# TPS54560B (TI SLVSF00, Jan 2019): 4.5-60 V in, 5 A, non-synchronous, so a
+# B560C catch diode. Values from the datasheet's 5 V / 5 A design (Fig. 32,
+# pp.24-31): 400 kHz (RT 243k), FB 0.8 V x (1 + 53.6k/10.2k) = 5.00 V,
+# COMP 16.9k + 4.7 nF with 47 pF, BOOT 100 nF. L = 10 uH for 24-48 V in.
+# EN left open (on). Budget: CM5 2.5 A (datasheet B.3) + RS-485 converter
+# and LEDs; the CM5 PSU warning is silenced with PSU_MAX_CURRENT in its EEPROM.
+part('U13', 'TPS54560BDDAR', 'HSOIC8', 0, 0, pins={
+    1: 'BUCK_BOOT', 2: '+24V', 3: None, 4: 'BUCK_RT', 5: 'BUCK_FB', 6: 'BUCK_COMP', 7: 'GND',
+    8: 'BUCK_SW', 9: 'GND'}, mpn='TI TPS54560BDDAR (LCSC C1850354)')
+two('C3', '4.7uF 50V', 'C1210', 0, 0, '+24V', 'GND', note='X7R, at VIN')
+two('C4', '4.7uF 50V', 'C1210', 0, 0, '+24V', 'GND', note='X7R')
+two('C6', '220nF 100V', 'C0805', 0, 0, '+24V', 'GND', note='closest to VIN/GND')
+two('C7', '100nF', 'C', 0, 0, 'BUCK_BOOT', 'BUCK_SW', note='BOOT, X7R 16 V+')
+two('R8', '243k', 'R', 0, 0, 'BUCK_RT', 'GND', note='RT: 400 kHz, 1 %')
+two('R9', '16.9k', 'R', 0, 0, 'BUCK_COMP', 'BUCK_CZ', note='compensation')
+two('C8', '4.7nF', 'C', 0, 0, 'BUCK_CZ', 'GND', note='compensation')
+two('C15', '47pF', 'C', 0, 0, 'BUCK_COMP', 'GND', note='compensation')
+two('D9', 'B560C', 'SMC', 0, 0, 'BUCK_SW', 'GND', note='catch diode, 60 V 5 A (LCSC C85100)')
+two('L1', '10uH', 'L1245', 0, 0, 'BUCK_SW', '+5V', mpn='Bourns SRP1245A-100M',
+    note='Isat >= 8 A (the TPS54560B current limit)')
+two('R22', '53.6k', 'R', 0, 0, '+5V', 'BUCK_FB', note='RFBT, 1 %')
+two('R23', '10.2k', 'R', 0, 0, 'BUCK_FB', 'GND', note='RFBB, 1 %')
+two('C9', '47uF 10V', 'C1210', 0, 0, '+5V', 'GND', note='X7R/X5R')
+two('C10', '47uF 10V', 'C1210', 0, 0, '+5V', 'GND')
+two('C16', '47uF 10V', 'C1210', 0, 0, '+5V', 'GND')
 
 # ============================================================ digital inputs (x16)
 # Field side, per input: terminal -> 4.7k (1206) -> green LED -> opto LED -> 0V_IO,
 # with 2.2k and 10 nF across the opto LED and a 1N4148W from 0V_IO to the
 # 4.7k's far end (reverse voltage). About 1.7 mA at 11 V; 5 V stays off.
-# Logic side: opto collector pulled up by 22k, read by the 74HC541 (low = on).
+# Logic side: opto collector pulled up by 22k to 3.3 V, read by a 74HC165 (low = on).
 # TLP291-4 (Rev 9.0): ch k: anode 2k-1, cathode 2k, collector 18-2k, emitter 17-2k.
 def opto4(ref, x, y, chans, mpn='Toshiba TLP291-4(GB)'):
     """chans: 4 tuples (anode, cathode, collector, emitter) for channels 1-4."""
@@ -358,35 +311,43 @@ for n in range(1, 17):
     two('D%d' % (100 + n), 'IN', 'LED', x, 22, p + 'K', p + 'A', mpn='0805 LED, green')
     two('R%d' % (120 + n), '2.2k', 'R', x, 26, p + 'K', '0V_IO', note='threshold shunt')
     two('C%d' % (100 + n), '10nF', 'C', x, 29, p + 'K', '0V_IO', note='filter')
-    two('R%d' % (140 + n), '22k', 'R', x, 46, '+5V', 'DIN%d' % n, note='pull-up')
+    two('R%d' % (140 + n), '22k', 'R', x, 46, '+3V3', 'DIN%d' % n, note='pull-up')
 for k in range(4):                                    # U20-U23: inputs 4k+1 .. 4k+4
     opto4('U%d' % (20 + k), 14 + 22 * k, 38,
           [('DI%d_K' % (4 * k + j), '0V_IO', 'DIN%d' % (4 * k + j), 'GND') for j in range(1, 5)])
 
-# 74HC541 x2: /OE1 = chip select, /OE2 = /RD. Input 1 -> D0.
-for i, (ref, cs) in enumerate((('U14', '~{CS2}'), ('U15', '~{CS3}'))):
-    pins = {1: cs, 10: 'GND', 19: '~{RD}', 20: '+5V'}
-    for b in range(8):
-        pins[2 + b] = 'DIN%d' % (8 * i + b + 1)        # A1-A8 on pins 2-9
-        pins[18 - b] = 'D%d' % b                       # Y1-Y8 on pins 18-11
-    part(ref, '74HC541', 'SO20W', 20 + 40 * i, 50, pins=pins, mpn='TI SN74HC541DWR')
-    decouple('C%d' % (24 + i), 28 + 40 * i, 50)
+# 74HC165 x2 (TI SCLS116H): 1 SH/LD, 2 CLK, 3-6 E-H, 7 /QH, 8 GND, 9 QH,
+# 10 SER, 11-14 A-D, 15 CLK INH, 16 VCC. Input n -> A..H of U14 (1-8) / U15 (9-16).
+# GPIO6 pulses /PL low to load, then SPI0 clocks the chain: U14 QH -> MISO,
+# U15 QH -> U14 SER. First bit read = input 8, then 7 .. 1, 16 .. 9 (low = on).
+HC165_IN = (11, 12, 13, 14, 3, 4, 5, 6)                  # A..H
+for i, (ref, ser, qh) in enumerate((('U14', 'SR_CHAIN_I', 'SR_MISO'), ('U15', 'GND', 'SR_CHAIN_I'))):
+    pins = {1: '~{DI_LOAD}', 2: 'SR_SCLK', 7: None, 8: 'GND', 9: qh, 10: ser, 15: 'GND', 16: '+3V3'}
+    for k in range(8):
+        pins[HC165_IN[k]] = 'DIN%d' % (8 * i + k + 1)
+    part(ref, '74HC165', 'SO16', 20 + 40 * i, 50, pins=pins, mpn='Nexperia 74HC165D (LCSC C5613)')
+    decouple('C%d' % (24 + i), 28 + 40 * i, 50, '+3V3')
 
 # ============================================================ digital outputs (x16)
-# 74HC574 -> 1k -> opto LED -> GND. Opto transistor: +5V_IO -> VNI4140K IN,
-# 10k pull-down. /OE = ~OUT_OE (high = latches off = outputs off) until
-# software sets PB0 and the watchdog is running.
-for i, (ref, clk) in enumerate((('U16', 'OCLK1'), ('U17', 'OCLK2'))):
-    pins = {1: '~{OUT_OE}', 10: 'GND', 11: clk, 20: '+5V'}
-    for b in range(8):
-        pins[2 + b] = 'D%d' % b                        # 1D-8D on pins 2-9
-        pins[19 - b] = 'DQ%d' % (8 * i + b + 1)        # 1Q-8Q on pins 19-12
-    part(ref, '74HC574', 'SO20W', 110 + 40 * i, 50, pins=pins, mpn='TI SN74HC574DWR')
-    decouple('C%d' % (26 + i), 118 + 40 * i, 50)
+# 74HC595 -> 330R -> opto LED -> GND. Opto transistor: +5V_IO -> VNI4140K IN,
+# 10k pull-down. /OE = ~OUT_OE from the watchdog (high = outputs off).
+# 74HC595 x2 (TI SCLS041J): 15 QA, 1-7 QB-QH, 8 GND, 9 QH', 10 /SRCLR, 11 SRCLK,
+# 12 RCLK, 13 /OE, 14 SER, 16 VCC. SPI0 MOSI -> U16 SER, U16 QH' -> U17 SER;
+# RCLK = CE0 latches at the end of the 16-bit transfer. Output n = QA..QH of
+# U16 (1-8) / U17 (9-16): send outputs 16 .. 9, then 8 .. 1 (MSB first).
+HC595_Q = (15, 1, 2, 3, 4, 5, 6, 7)                      # QA..QH
+for i, (ref, ser, qh2) in enumerate((('U16', 'SR_MOSI', 'SR_CHAIN_O'), ('U17', 'SR_CHAIN_O', None))):
+    pins = {8: 'GND', 9: qh2, 10: '+3V3', 11: 'SR_SCLK', 12: 'SR_LATCH', 13: '~{OUT_OE}',
+            14: ser, 16: '+3V3'}
+    for k in range(8):
+        pins[HC595_Q[k]] = 'DQ%d' % (8 * i + k + 1)
+    part(ref, '74HC595', 'SO16', 110 + 40 * i, 50, pins=pins, mpn='Nexperia 74HC595D (LCSC C5947)')
+    decouple('C%d' % (26 + i), 118 + 40 * i, 50, '+3V3')
 
 for n in range(1, 17):
     x = 104 + 5.5 * (n - 1)
-    two('R%d' % (200 + n), '1k', 'R', x, 44, 'DQ%d' % n, 'DO%d_A' % n, note='opto LED, ~3.8 mA')
+    two('R%d' % (200 + n), '330', 'R', x, 44, 'DQ%d' % n, 'DO%d_A' % n,
+        note='opto LED, ~5 mA from 3.3 V (TLP291 VF 1.2 V typ)')
     two('R%d' % (220 + n), '10k', 'R', x, 30, 'VIN%d' % n, '0V_IO', note='VNI input pull-down')
     two('R%d' % (240 + n), '4.7k', 'R1206', x, 22, 'OUT%d' % n, 'DO%d_L' % n, note='output LED')
     two('D%d' % (200 + n), 'OUT', 'LED', x, 18, '0V_IO', 'DO%d_L' % n, mpn='0805 LED, yellow')
@@ -424,7 +385,7 @@ part('U34', '78L05', 'SOT89', 96, 20, pins={1: '+5V_IO', 2: '0V_IO', 3: '24V_IO'
 two('C35', '100nF 50V', 'C', 92, 20, '24V_IO', '0V_IO')
 two('C36', '1uF', 'C', 92, 22, '+5V_IO', '0V_IO')
 
-# U35 TLP291-4: ch1 = output fault, ch2 = field power present, ch3-4 spare.
+# U35 TLP291-4: ch1 = output fault (GPIO22), ch2 = field power present (GPIO23), ch3-4 spare.
 # Fault: +5V_IO -> 2.2k -> opto LED -> OUT_FLT (pulled low by any STATn).
 # Field power: 24V_IO -> 10k -> opto LED -> 0V_IO.
 opto4('U35', 96, 32, [('FLT_A', 'OUT_FLT', '~{OUT_FLT}', 'GND'),
@@ -433,8 +394,8 @@ opto4('U35', 96, 32, [('FLT_A', 'OUT_FLT', '~{OUT_FLT}', 'GND'),
                       ('0V_IO', '0V_IO', None, 'GND')])
 two('R30', '2.2k', 'R', 92, 28, '+5V_IO', 'FLT_A', note='~1.5 mA; STAT is specified at 1.6 mA')
 two('R31', '10k', 'R1206', 92, 30, '24V_IO', 'FPW_A', note='~2.2 mA at 24 V')
-two('R32', '22k', 'R', 100, 44, '+5V', '~{OUT_FLT}', note='PB4 pull-up')
-two('R33', '22k', 'R', 102, 44, '+5V', '~{FIELD_OK}', note='PB5 pull-up')
+two('R32', '22k', 'R', 100, 44, '+3V3', '~{OUT_FLT}', note='GPIO22 pull-up')
+two('R33', '22k', 'R', 102, 44, '+3V3', '~{FIELD_OK}', note='GPIO23 pull-up')
 
 # Field terminals (3.81 mm pluggable, top edge)
 part('J2', 'DI 1-8', 'TB10', 10, 3, pins={**{i + 1: DI[i] for i in range(8)}, 9: '24V_SNS', 10: '0V_IO'}, note='IN1-IN8, 24V (sensor supply), 0V')
@@ -460,18 +421,19 @@ part('U41', 'REF3040', 'SOT23', 40, 100, pins={1: '+5VA', 2: 'VREF_ADC', 3: 'AGN
 two('C44', '100nF', 'C', 40, 96, '+5VA', 'AGND_ISO')
 two('C45', '1uF', 'C', 44, 100, 'VREF_ADC', 'AGND_ISO', note='ADC reference bypass')
 
-# SPI across the barrier. ISO7741 (default-high, no F suffix): A/B/C forward
+# SPI1 across the barrier, 3.3 V side 1, 5 V side 2 (2.25-5.5 V each, set
+# independently). ISO7741 (default-high, no F suffix): A/B/C forward
 # = SCLK, MOSI, ADC /CS; D back = MISO. EN1/EN2 tied high.
 part('U42', 'ISO7741DWR', 'SO16W', 50, 84, pins={
-    1: '+5V', 2: 'GND', 3: 'SPI_SCLK', 4: 'SPI_MOSI', 5: '~{ADC_CS}', 6: 'SPI_MISO', 7: '+5V',
+    1: '+3V3', 2: 'GND', 3: 'SPI_SCLK', 4: 'SPI_MOSI', 5: '~{ADC_CS}', 6: 'SPI_MISO', 7: '+3V3',
     8: 'GND', 9: 'AGND_ISO', 10: '+5VA', 11: 'MISO_I', 12: '~{ADC_CS_I}', 13: 'MOSI_I',
     14: 'SCLK_I', 15: 'AGND_ISO', 16: '+5VA'}, mpn='TI ISO7741DWR (default high)')
 # ISO7720 (default-high): DAC /SYNC and /LDAC
 part('U43', 'ISO7720DR', 'SO8', 64, 84, pins={
-    1: '+5V', 2: '~{DAC_SYNC}', 3: '~{DAC_LDAC}', 4: 'GND', 5: 'AGND_ISO', 6: '~{DAC_LDAC_I}',
+    1: '+3V3', 2: '~{DAC_SYNC}', 3: '~{DAC_LDAC}', 4: 'GND', 5: 'AGND_ISO', 6: '~{DAC_LDAC_I}',
     7: '~{DAC_SYNC_I}', 8: '+5VA'}, mpn='TI ISO7720DR (default high)')
-for _r, _x, _y, _v, _g in (('C46', 46, 80, '+5V', 'GND'), ('C47', 46, 90, '+5VA', 'AGND_ISO'),
-                           ('C48', 60, 80, '+5V', 'GND'), ('C49', 60, 90, '+5VA', 'AGND_ISO')):
+for _r, _x, _y, _v, _g in (('C46', 46, 80, '+3V3', 'GND'), ('C47', 46, 90, '+5VA', 'AGND_ISO'),
+                           ('C48', 60, 80, '+3V3', 'GND'), ('C49', 60, 90, '+5VA', 'AGND_ISO')):
     decouple(_r, _x, _y, _v, _g)
 
 # ============================================================ analog inputs (x8)
@@ -564,7 +526,7 @@ part('J8', 'AO 5-8', 'TB9', 140, 117, pins={
     1: 'AO5', 2: 'AOC5', 3: 'AO6', 4: 'AOC6', 5: 'AO7', 6: 'AOC7', 7: 'AO8', 8: 'AOC8',
     9: 'AGND_ISO'}, note='OUT5 COM5 ... OUT8 COM8, 0V')
 
-# ============================================================ RS-485 (UART channel A)
+# ============================================================ RS-485 (UART0)
 # B0505XT-1WR3 (SMD): 1 GND, 2 Vin, 4 0V, 5 +Vo, 8 NC (isolated). 20 mA
 # minimum load: R50 (330R, 15 mA) plus the bias network and transceiver.
 part('PS2', 'B0505XT-1WR3', 'B05XT', 176, 92, pins={1: 'GND', 2: '+5V', 4: 'GND_485', 5: '+5V_485', 8: None},
@@ -574,14 +536,15 @@ two('C61', '10uF', 'C0805', 182, 88, '+5V_485', 'GND_485', note='B0505 output')
 two('R50', '330', 'R1206', 186, 92, '+5V_485', 'GND_485', note='minimum load')
 # CA-IS3082WX: 1 VDDA, 2/7/8 GNDA, 3 RO, 4 /RE, 5 DE, 6 DI, 9/10/15 GNDB,
 # 12 A, 13 B, 11/14 NC, 16 VDDB. DE = /RE = DIR485 (high = transmit).
+# VDDA 3.3 V (2.375-5.5 V), VDDB 5 V; DE/DI TTL inputs, RO swings to VDDA.
 part('U50', 'CA-IS3082WX', 'SO16W', 176, 102, pins={
-    1: '+5V', 2: 'GND', 3: 'UA_RX', 4: 'DIR485', 5: 'DIR485', 6: 'UA_TX', 7: 'GND', 8: 'GND',
+    1: '+3V3', 2: 'GND', 3: 'UA_RX', 4: 'DIR485', 5: 'DIR485', 6: 'UA_TX', 7: 'GND', 8: 'GND',
     9: 'GND_485', 10: 'GND_485', 11: None, 12: 'RS485_A', 13: 'RS485_B', 14: None,
     15: 'GND_485', 16: '+5V_485'}, mpn='Chipanalog CA-IS3082WX')
-decouple('C62', 170, 98)
+decouple('C62', 170, 98, '+3V3')
 decouple('C63', 182, 98, '+5V_485', 'GND_485')
 two('C64', '1uF', 'C', 184, 100, '+5V_485', 'GND_485', note='VDDB 0.1 + 1 uF')
-two('R51', '10k', 'R', 166, 96, '+5V', 'UA_RX', note='RO is off while transmitting')
+two('R51', '10k', 'R', 166, 96, '+3V3', 'UA_RX', note='RO is off while transmitting')
 two('R52', '680', 'R', 186, 104, '+5V_485', 'RS485_A', note='bias')
 two('R53', '680', 'R', 186, 108, 'RS485_B', 'GND_485', note='bias')
 two('R54', '120', 'R1206', 190, 106, 'RS485_A', 'RT_B', note='termination')
@@ -611,7 +574,7 @@ def nets():
 
 # Each isolated area: its power and ground nets
 AREAS = {
-    'logic': {'GND', '+5V', '+24V', '24V_RAW', '24V_F', 'USB_5V'},
+    'logic': {'GND', '+5V', '+3V3', '+24V', '24V_RAW', '24V_F', 'USB_VBUS'},
     'field': {'0V_IO', '24V_IO', '+5V_IO', '24V_SNS'},
     'analog': {'AGND_ISO', '+24VA', '+5VA', 'VREF_ADC'},
     'rs485': {'GND_485', '+5V_485'},
@@ -665,6 +628,10 @@ def net_areas():
 # (xmin, ymin, xmax, ymax). Written by fpgeom.py; check_place.py checks it.
 CRT = {
     'B05XT': (-7.1, -6.6, 7.1, 6.6), 'C': (-1.48, -0.73, 1.48, 0.73),
+    'CM5': (-3.75, -51.75, 36.75, 3.75), 'RJ45': (-9.25, -10.75, 9.25, 11.15),
+    'USBC': (-5.32, -5.27, 5.32, 4.15), 'SOT23-6': (-2.05, -1.7, 2.05, 1.7),
+    'SMC': (-4.9, -3.35, 4.9, 3.35), 'L1245': (-7.35, -6.5, 7.35, 6.5),
+    'H2x5': (-1.77, -1.77, 4.32, 11.93),
     'C0805': (-1.7, -0.98, 1.7, 0.98), 'C1206': (-2.3, -1.15, 2.3, 1.15),
     'C1210': (-2.3, -1.6, 2.3, 1.6), 'C1808': (-3.1, -1.4, 3.1, 1.4),
     'CP10': (-6.65, -5.5, 6.65, 5.5), 'DIP40': (-1.53, -1.59, 16.77, 49.84),
@@ -727,8 +694,8 @@ def origin(ref, x, y, rot=0):
 # Areas, 3 mm apart. Bridges (optos, isolators, converters) straddle the gaps.
 GAP = 3.0
 Y_FIELD = 45.5                          # field digital: y 0 .. 45.5
-Y_LOGIC = Y_FIELD + GAP                 # logic: y 48.5 .. 95
-Y_LOW = 95.0
+Y_LOGIC = Y_FIELD + GAP                 # logic: y 48.5 .. 105
+Y_LOW = 105.0
 Y_ANALOG = Y_LOW + GAP                  # analog and RS-485: y 98 .. bottom
 X_485 = 192.5                           # analog x < 192.5, RS-485 x > 195.5
 AREA_RECTS = {
@@ -797,75 +764,57 @@ at('R32', 133.0, 53.0)
 at('R33', 137.0, 53.0)
 
 # ---------------------------------------------------------------- logic, upper row
-# Input buffers under the input optos, output latches under the output optos
+# Input shift registers under the input optos, output shift registers under
+# the output optos
+SR_Y = 58.7
 for _r, _n0 in (('U14', 1), ('U15', 9)):
-    at(_r, sum(di_x(_n0 + j) for j in range(8)) / 8, 60.5, 270)
+    at(_r, sum(di_x(_n0 + j) for j in range(8)) / 8, SR_Y, 270)
 for _r, _n0 in (('U16', 1), ('U17', 9)):
-    at(_r, sum(do_x(_n0 + j) for j in range(8)) / 8, 60.5, 90)
-at('C24', 37.3, 60.5, 90)
-at('C25', 81.3, 60.5, 90)
-at('C26', 159.6, 60.5, 90)
-at('C27', 203.6, 60.5, 90)
-# Decoding: 74HC00 x2, 74HC30, 74HC138
-for _i, _r in enumerate(('U6', 'U7', 'U8', 'U9')):
-    at(_r, 93 + 10 * _i, 56.0, 90)
-    at('C%d' % (16 + _i), 93 + 10 * _i, 61.3)
-# Output clocks (74HC32) and watchdog (74HC123), between the output latches
-at('U10', 182.0, 60.0)
-at('U11', 196.0, 60.0)
-at('C20', 182.0, 66.3)
-at('C21', 196.0, 66.3)
-at('R5', 189.0, 56.5, 90)
-at('C5', 189.0, 62.0, 90)
-at('R6', 186.0, 66.3)
-at('R7', 191.8, 66.3)
-# Clock, reset, pull-ups
-at('X1', 46.5, 59.0)
-at('C22', 46.5, 64.3)
-at('R8', 53.0, 57.0, 90)
-at('R9', 56.0, 57.0, 90)
-at('U12', 41.5, 65.5)
-at('R10', 53.0, 62.5, 90)
-at('R11', 56.0, 62.5, 90)
-at('R12', 59.0, 62.5, 90)
-at('C23', 62.5, 62.5, 90)
-# Expansion header (2x16) lying along the upper row
-at('J11', 110.0, 65.2, 90)
-# USB serial header and jumpers
-at('J10', 146.0, 65.5, 90)
-at('R21', 152.0, 61.0)
-at('JP2', 142.0, 61.0, 90)
-at('JP1', 148.0, 57.0, 90)
-# Left edge: reset button, LEDs, PE hole
+    at(_r, sum(do_x(_n0 + j) for j in range(8)) / 8, SR_Y, 90)
+at('C24', 37.3, SR_Y, 90)
+at('C25', 81.3, SR_Y, 90)
+at('C26', 159.6, SR_Y, 90)
+at('C27', 203.6, SR_Y, 90)
+at('H2', 225.5, 59.0)
+# Left edge: power button, LEDs, PE hole
 at('SW1', 7.0, 53.5, 90)
 at('H1', 4.5, 62.5)
-for _i, (_d, _r) in enumerate((('D3', 'R18'), ('D4', 'R19'), ('D5', 'R20'))):
+for _i, (_d, _r) in enumerate((('D3', 'R18'), ('D4', 'R19'), ('D5', 'R20'), ('D8', 'R24'))):
     at(_d, 12.5, 59.5 + 2.6 * _i)
     at(_r, 17.0, 59.5 + 2.6 * _i)
 at('C2', 5.5, 67.5)                              # PE to GND
 
-# ---------------------------------------------------------------- logic, CPU row
-ROW = 80.0
-at('U1', 73.0, ROW, 90)                          # W65C02S: pin 1 bottom left
-at('U2', 110.0, ROW, 90)                         # RAM
-at('U3', 131.0, ROW)                             # flash socket
-at('U4', 168.5, ROW, 90)                         # VIA
-at('U5', 205.5, ROW)                             # UART
-at('C11', 92.0, 91.5)
-at('C12', 110.0, 89.0)
-at('C13', 131.0, 93.0)
-at('C14', 184.0, 91.5)
-at('C15', 217.0, 84.5, 90)
-for _i, _r in enumerate(('R13', 'R14', 'R15', 'R16', 'R17')):
-    at(_r, 147.5 + 3.4 * _i, 91.5)
-# UART interrupt transistors, right of the UART
-at('Q1', 218.5, 73.0)
-at('Q2', 218.5, 79.0)
-at('R1', 223.5, 72.0)
-at('R2', 223.5, 78.0)
-at('R3', 223.5, 74.0)
-at('R4', 223.5, 80.0)
-at('H2', 225.5, 62.0)
+# ---------------------------------------------------------------- CM5, Ethernet, USB
+# CM5 turned 270 degrees: connector 1-100 along the top, 101-200 along the
+# bottom, the Ethernet pins (3-12) toward the right, near the jack.
+at('U1', 175.75, 83.5, 270)
+at('C12', 145.5, 66.0, 90)                       # 5 V, left of the module
+at('C13', 145.5, 71.0, 90)
+at('C11', 145.5, 75.5, 90)                       # 3.3 V
+# MagJack on the right edge, cable end out (footprint front = +y, turned 90)
+origin('J12', BOARD_W - 11.15, 73.0, 90)
+at('R25', 205.8, 68.0, 90)
+at('R26', 205.8, 72.0, 90)
+at('C70', 205.8, 76.0, 90)
+# USB-C below it, also opening to the right
+origin('J13', BOARD_W - 4.15, 89.0, 90)
+at('U51', 216.0, 88.5)
+at('R27', 209.5, 85.5)
+at('R28', 209.5, 88.0)
+at('C71', 209.5, 90.5)
+at('R29', 209.5, 93.0)                           # DIR485 pull-down
+
+# ---------------------------------------------------------------- watchdog, boot, expansion
+at('U11', 138.0, 74.0)
+at('C14', 138.0, 66.6)
+at('R5', 131.0, 69.5, 90)
+at('C5', 131.0, 74.5, 90)
+at('R6', 131.0, 79.5, 90)
+at('R7', 138.0, 81.5)
+at('J11', 125.0, 99.0, 90)                       # expansion header
+at('JP1', 138.0, 99.0, 90)                       # RPIBOOT jumper
+for _i, _r in enumerate(('R15', 'R16', 'R17')):  # SPI1 chip-select pull-ups
+    at(_r, 84.0 + 3.5 * _i, 101.5, 90)
 
 # Power input, left edge: J1 faces out to the left
 origin('J1', 9.0, 72.3, 270)
@@ -874,58 +823,63 @@ at('D1', 23.0, 71.0)
 at('D2', 16.0, 75.5)
 at('C3', 23.5, 75.0)
 at('C4', 23.5, 78.6)
-at('U13', 31.0, 74.5)
+at('U13', 31.0, 74.5)                            # TPS54560B
 at('C6', 29.0, 70.0)
-at('C7', 37.0, 70.0)
-at('C8', 37.0, 72.0)
-at('L1', 39.3, 78.5)
-at('R22', 31.0, 79.0)
-at('R23', 31.0, 81.0)
-at('C9', 45.5, 76.0, 90)
-at('C10', 45.5, 81.0, 90)
+at('C7', 35.5, 70.5)                             # BOOT
+at('R8', 28.0, 79.5)                             # RT
+at('R9', 31.5, 79.5)                             # COMP R
+at('C8', 35.0, 79.5)                             # COMP C
+at('C15', 28.0, 81.5)                            # COMP 47 pF
+at('R22', 31.5, 81.5)                            # FB top
+at('R23', 35.0, 81.5)                            # FB bottom
+at('D9', 42.0, 74.0, 90)                         # B560C catch diode
+at('L1', 53.0, 75.0)                             # 10 uH
+at('C9', 63.5, 75.0, 90)                         # 47 uF output
+at('C10', 67.0, 75.0, 90)
+at('C16', 70.5, 75.0, 90)
 at('C1', 35.6, 89.0)
-at('C41', 16.5, 81.3)                           # URB input
+at('C41', 16.5, 81.3)                            # URB input
 
 # ---------------------------------------------------------------- isolation row
 at('PS1', 14.0, GAP_LA, 270)                     # URB: input pins (1, 2) up
 at('U42', 60.0, GAP_LA, 270)                     # ISO7741: side 1 up
 at('U43', 72.0, GAP_LA, 270)                     # ISO7720: side 1 up
-at('C46', 52.0, 92.8)
-at('C47', 52.0, 100.0)
-at('C48', 78.0, 92.8)
-at('C49', 78.0, 100.0)
+at('C46', 52.0, 102.8)
+at('C47', 52.0, 110)
+at('C48', 78.0, 102.8)
+at('C49', 78.0, 110)
 # B0505XT: pins 1, 2 (input) and 4 (output 0V) share a row, so the barrier
 # runs between pins 2 and 4. Turned 270 degrees, 1 and 2 are up (logic) and
 # 4 and 5 down (RS-485), with the gap centred 1.27 mm below the body centre.
 at('PS2', 222.5, GAP_LA - 1.27, 270)
-at('U50', 207.0, GAP_LA, 270)                    # CA-IS3082WX: side A up
-at('C60', 199.0, 91.6)
-at('C62', 195.5, 91.6)
-at('R51', 198.0, 93.6)
+at('U50', 210.0, GAP_LA, 270)                    # CA-IS3082WX: side A up
+at('C60', 217.0, 95.5)
+at('C62', 207.0, 98.6)
+at('R51', 212.5, 98.6)
 
 # ---------------------------------------------------------------- analog
 # Chip row under the isolators
-at('U40', 33.0, 103.5)                           # 78L05 -> +5VA
-at('C40', 33.5, 109.5)                           # URB output 10 uF
-at('C42', 38.0, 103.0, 90)
-at('C43', 39.5, 108.5)
-at('U41', 44.0, 103.0)                           # REF3040
-at('C44', 44.0, 106.6)
-at('C45', 47.5, 103.0, 90)
-at('U44', 55.0, 107.0, 90)                       # MCP3208: CH0-7 down
-at('C50', 63.0, 107.0, 90)
-at('U45', 100.0, 106.0)                          # DAC7568
-at('C51', 106.0, 106.0, 90)
-at('C52', 94.0, 106.0, 90)
-at('R34', 100.0, 110.3)
-at('U46', 115.0, 106.5, 90)                      # LM324, channels 1-4
-at('C53', 121.5, 106.5, 90)
-at('U47', 165.0, 106.5, 90)                      # LM324, channels 5-8
-at('C54', 171.5, 106.5, 90)
+at('U40', 33.0, 113.5)                           # 78L05 -> +5VA
+at('C40', 33.5, 119.5)                           # URB output 10 uF
+at('C42', 38.0, 113, 90)
+at('C43', 39.5, 118.5)
+at('U41', 44.0, 113)                           # REF3040
+at('C44', 44.0, 116.6)
+at('C45', 47.5, 113, 90)
+at('U44', 55.0, 117, 90)                       # MCP3208: CH0-7 down
+at('C50', 63.0, 117, 90)
+at('U45', 100.0, 116)                          # DAC7568
+at('C51', 106.0, 116, 90)
+at('C52', 94.0, 116, 90)
+at('R34', 100.0, 120.3)
+at('U46', 115.0, 116.5, 90)                      # LM324, channels 1-4
+at('C53', 121.5, 116.5, 90)
+at('U47', 165.0, 116.5, 90)                      # LM324, channels 5-8
+at('C54', 171.5, 116.5, 90)
 
 # Channel cells above the bottom terminals: AI cells 11 mm wide from x 2,
-# AO cells 12.5 mm wide from x 91, rows from y 113 down to the terminals.
-AI_W, AO_W, CELL_Y = 11.0, 12.5, 113.0
+# AO cells 12.5 mm wide from x 91, rows from y 123 down to the terminals.
+AI_W, AO_W, CELL_Y = 11.0, 12.5, 123.0
 for n in range(1, 9):
     x, y = 2.0 + AI_W * (n - 1), CELL_Y
     at('R%d' % (300 + n), x + 1.0, y + 2.5, 90)   # 15k
@@ -963,15 +917,15 @@ at('H3', 5.0, BOARD_H - 6.0)
 at('H4', 225.5, BOARD_H - 6.0)
 
 # ---------------------------------------------------------------- RS-485 (bus side)
-at('C61', 205.0, 106.0, 90)
-at('R50', 212.0, 106.0, 90)
-at('C63', 222.0, 105.5)
-at('C64', 222.0, 108.0)
-at('R52', 210.0, 116.0, 90)
-at('R53', 213.0, 116.0, 90)
-at('R54', 218.0, 116.0, 90)
-at('JP3', 222.5, 116.0)
-at('D7', 205.0, 116.0)
+at('C61', 203.0, 116, 90)
+at('R50', 212.0, 116, 90)
+at('C63', 222.0, 115.5)
+at('C64', 222.0, 118)
+at('R52', 210.0, 126, 90)
+at('R53', 213.0, 126, 90)
+at('R54', 218.0, 126, 90)
+at('JP3', 222.5, 126)
+at('D7', 205.0, 126)
 
 for _p in PARTS:
     if _p['ref'] not in PLACE:

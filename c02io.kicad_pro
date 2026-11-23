@@ -398,6 +398,10 @@
       },
       {
         "netclass": "Supply",
+        "pattern": "+3V3"
+      },
+      {
+        "netclass": "Supply",
         "pattern": "+5V"
       },
       {
@@ -430,7 +434,7 @@
       },
       {
         "netclass": "Supply",
-        "pattern": "USB_5V"
+        "pattern": "USB_VBUS"
       },
       {
         "netclass": "Supply",

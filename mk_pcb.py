@@ -167,8 +167,10 @@ def gaps():
 
 def labels(b):
     """Terminal pin names, in the strip between each terminal and the parts."""
+    B = board.BOARD_H
     for ref, y, size in (('J2', 11.85, 0.8), ('J3', 11.85, 0.8), ('J4', 11.85, 0.8), ('J5', 11.85, 0.8),
-                         ('J6', 135.25, 0.8), ('J7', 135.25, 0.8), ('J8', 135.25, 0.8), ('J9', 135.25, 0.8)):
+                         ('J6', B - 11.75, 0.8), ('J7', B - 11.75, 0.8), ('J8', B - 11.75, 0.8),
+                         ('J9', B - 11.75, 0.8)):
         p = board.P_BY_REF[ref]
         step = -3.81 if p['rot'] == 180 else 3.81
         for k in sorted(p['pins'], key=int):
@@ -182,14 +184,18 @@ def labels(b):
     p = board.P_BY_REF['J1']
     for k, s in (('1', '+24V'), ('2', '0V'), ('3', 'PE')):
         text(b, s, 13.3, p['y'] + 3.81 * (int(k) - 1), 0.8)
-    text(b, 'C02IO  W65C02S I/O  rev A', 105.0, 36.0, 1.5)
+    text(b, 'C02IO  CM5 I/O  rev B', 105.0, 36.0, 1.5)
     text(b, 'KC4UMS  2026', 105.0, 39.0, 1.0)
     text(b, 'FIELD 24 V (0V_IO)', 105.0, 43.0, 1.0)
-    text(b, 'ANALOG (isolated)', 140.0, 100.5, 1.0)
-    text(b, 'AO jumpers: 1-3 + 2-4 = 0-10 V,  3-5 + 4-6 = 4-20 mA', 140.0, 103.0, 0.8)
-    text(b, 'AI jumper fitted = 4-20 mA', 140.0, 105.0, 0.8)
-    text(b, 'RS-485', 212.0, 125.0, 1.0)
-    text(b, 'TERM', 222.5, 112.0, 0.7)
+    text(b, 'ANALOG (isolated)', 140.0, 110.5, 1.0)
+    text(b, 'AO jumpers: 1-3 + 2-4 = 0-10 V,  3-5 + 4-6 = 4-20 mA', 140.0, 113.0, 0.8)
+    text(b, 'AI jumper fitted = 4-20 mA', 140.0, 115.0, 0.8)
+    text(b, 'RS-485', 212.0, 135.0, 1.0)
+    text(b, 'TERM', 222.5, 122.0, 0.7)
+    text(b, 'ETH', 216.0, 61.5, 0.8)
+    text(b, 'USB-C (flash)', 214.0, 82.6, 0.7)
+    text(b, 'RPIBOOT', 138.0, 95.5, 0.7)
+    text(b, 'POWER', 7.0, 59.5, 0.7)
 
 
 def build():

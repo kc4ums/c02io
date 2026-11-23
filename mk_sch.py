@@ -33,7 +33,36 @@ def names(*seq):
 
 
 HC00 = names('1A', '1B', '1Y', '2A', '2B', '2Y', 'GND', '3Y', '3A', '3B', '4Y', '4A', '4B', 'VCC')
+def _cm5_names():
+    """CM5 pin names (datasheet Table 4) for the pins this board uses."""
+    gpio = {v: 'GPIO%d' % k for k, v in board.CM5_GPIO.items()}
+    fixed = {77: '+5V_IN', 79: '+5V_IN', 81: '+5V_IN', 83: '+5V_IN', 85: '+5V_IN', 87: '+5V_IN',
+             84: '+3V3_OUT', 86: '+3V3_OUT', 78: 'GPIO_VREF', 12: 'ETH_P0_P', 10: 'ETH_P0_N',
+             4: 'ETH_P1_P', 6: 'ETH_P1_N', 11: 'ETH_P2_P', 9: 'ETH_P2_N', 3: 'ETH_P3_P', 5: 'ETH_P3_N',
+             15: 'ETH_~{LED3}', 17: 'ETH_~{LED2}', 21: 'LED_~{ACT}', 92: 'PWR_BUT', 93: '~{RPIBOOT}',
+             103: 'USB_N', 105: 'USB_P'}
+    out = {}
+    for k, n in board.P_BY_REF['U1']['pins'].items():
+        if n:
+            k = int(k)
+            out[k] = 'GND' if n == 'GND' else fixed.get(k) or gpio[k]
+    return out
+
+
 PINNAMES = {
+    'CM5': _cm5_names(),
+    '74HC165': names('SH/~{LD}', 'CLK', 'E', 'F', 'G', 'H', '~{QH}', 'GND', 'QH', 'SER', 'A', 'B',
+                     'C', 'D', 'CLK_INH', 'VCC'),
+    '74HC595': names('QB', 'QC', 'QD', 'QE', 'QF', 'QG', 'QH', 'GND', "QH'", '~{SRCLR}', 'SRCLK',
+                     'RCLK', '~{OE}', 'SER', 'QA', 'VCC'),
+    'TPS54560B': names('BOOT', 'VIN', 'EN', 'RT/CLK', 'FB', 'COMP', 'GND', 'SW', 'PAD'),
+    'USBLC6-2SC6': names('I/O1', 'GND', 'I/O2', 'I/O2', 'VBUS', 'I/O1'),
+    'RJ45_MAGJACK': names('TRD0+', 'TRD0-', 'TRD1+', 'CT', 'CT', 'TRD1-', 'TRD2+', 'TRD2-', 'TRD3+',
+                          'TRD3-', 'VC1', 'VC2', 'VC3', 'VC4', 'LEDY_A', 'LEDY_K', 'LEDG_A', 'LEDG_K',
+                          'SHIELD', 'SHIELD'),
+    'USB_C_2.0': {'A1': 'GND', 'A4': 'VBUS', 'A5': 'CC1', 'A6': 'D+', 'A7': 'D-', 'A8': 'SBU1',
+                  'A9': 'VBUS', 'A12': 'GND', 'B1': 'GND', 'B4': 'VBUS', 'B5': 'CC2', 'B6': 'D+',
+                  'B7': 'D-', 'B8': 'SBU2', 'B9': 'VBUS', 'B12': 'GND', 'SH': 'SHIELD'},
     'W65C02S': names('VPB', 'RDY', 'PHI1O', 'IRQB', 'MLB', 'NMIB', 'SYNC', 'VDD',
                      *['A%d' % i for i in range(12)], 'VSS', 'A12', 'A13', 'A14', 'A15',
                      *['D%d' % i for i in range(7, -1, -1)], 'RWB', 'NC', 'BE', 'PHI2', 'SOB',
@@ -96,9 +125,11 @@ def kind(p):
     """(symbol name, {pin: name}, style): style 'box' (pins down both sides),
     'side' (one column), 'two' (two-terminal), 'none' (no pins)."""
     v, fp, ref = p['value'], p['fp'], p['ref']
-    for prefix, name in (('W65C02', 'W65C02S'), ('AS6C', 'AS6C62256'), ('SST39', 'SST39SF010A'),
-                         ('W65C22', 'W65C22N'), ('TL16C2552', 'TL16C2552'), ('DS1813', 'DS1813'),
-                         ('LMR36520', 'LMR36520'), ('ISO7741', 'ISO7741'), ('ISO7720', 'ISO7720'),
+    if fp == 'RJ45':
+        return 'RJ45_MAGJACK', PINNAMES['RJ45_MAGJACK'], 'box'
+    if fp == 'USBC':
+        return 'USB_C_2.0', PINNAMES['USB_C_2.0'], 'box'
+    for prefix, name in (('TPS54560', 'TPS54560B'), ('ISO7741', 'ISO7741'), ('ISO7720', 'ISO7720'),
                          ('DAC7568', 'DAC7568'), ('URB2424', 'URB2424YMD'), ('B0505XT', 'B0505XT')):
         if v.startswith(prefix):
             return name, PINNAMES[name], 'box' if len(PINNAMES[name]) > 5 else 'side'
@@ -111,7 +142,7 @@ def kind(p):
         n = len(p['pins'])
         return 'TERMINAL_%d' % n, {i: str(i) for i in range(1, n + 1)}, 'side'
     if fp.startswith('H') and fp[1].isdigit():
-        n = {'H1x2': 2, 'H1x3': 3, 'H1x6': 6, 'H2x3': 6, 'H2x16': 32}[fp]
+        n = {'H1x2': 2, 'H1x3': 3, 'H2x3': 6, 'H2x5': 10}[fp]
         return 'HEADER_%s' % fp[1:], {i: str(i) for i in range(1, n + 1)}, 'side' if n <= 6 else 'box'
     if fp == 'HOLE':
         return 'MOUNTING_HOLE', {}, 'none'
@@ -119,7 +150,7 @@ def kind(p):
         return 'MOUNTING_HOLE_PE', {1: 'PE'}, 'side'
     if fp == 'SW':
         return 'SWITCH', {1: '', 2: ''}, 'two'
-    if fp in ('LED', 'SOD123', 'SMA', 'SMB'):
+    if fp in ('LED', 'SOD123', 'SMA', 'SMB', 'SMC'):
         return 'DIODE', {1: 'K', 2: 'A'}, 'two'
     if fp == 'CP10':
         return 'C_POL', {1: '+', 2: ''}, 'two'
@@ -195,16 +226,16 @@ def lib_symbol(name, pn, style):
 # Each sheet: (file stem, title, rows). A row is a list of references drawn
 # left to right; long rows wrap.
 SHEETS = [
-    ('cpu', 'CPU, memory, VIA, UART, expansion', [
-        ['U1', 'U2', 'U3'], ['U4', 'U5'], ['Q1', 'R1', 'R3', 'Q2', 'R2', 'R4', 'J11']]),
-    ('logic', 'Decoding, clock, reset, watchdog, USB serial, LEDs', [
-        ['U6', 'U7', 'U8', 'U9', 'U10'], ['U11', 'R5', 'C5', 'R6', 'R7', 'X1', 'R8', 'R9', 'U12', 'SW1'],
-        ['R10', 'R11', 'R12', 'JP1', 'R13', 'R14', 'R15', 'R16', 'R17'],
-        ['J10', 'R21', 'JP2', 'D3', 'R18', 'D4', 'R19', 'D5', 'R20'],
-        ['C%d' % i for i in range(11, 24)]]),
+    ('cm5', 'Compute Module 5, Ethernet, USB-C, expansion', [
+        ['U1', 'C11', 'C12', 'C13'], ['J12', 'C70', 'R25', 'R26'],
+        ['J13', 'U51', 'R27', 'R28', 'C71'], ['J11', 'JP1', 'SW1', 'D8', 'R24', 'R29']]),
+    ('logic', 'Watchdog, SPI chip-select pull-ups, LEDs', [
+        ['U11', 'C14', 'R5', 'C5', 'R6', 'R7'], ['R15', 'R16', 'R17'],
+        ['D3', 'R18', 'D4', 'R19', 'D5', 'R20']]),
     ('power', '24 V input, 5 V buck, mounting holes', [
         ['J1', 'F1', 'D1', 'D2', 'C1', 'C2', 'C3', 'C4', 'C6'],
-        ['U13', 'C7', 'C8', 'L1', 'R22', 'R23', 'C9', 'C10'], ['H1', 'H2', 'H3', 'H4']]),
+        ['U13', 'C7', 'R8', 'R9', 'C8', 'C15', 'D9', 'L1', 'R22', 'R23', 'C9', 'C10', 'C16'],
+        ['H1', 'H2', 'H3', 'H4']]),
     ('inputs', 'Digital inputs 1-16 (field side 0V_IO, opto-isolated)', [
         ['J2', 'J3'], ['U20', 'U21', 'U22', 'U23'], ['U14', 'C24', 'U15', 'C25']] + [
         ['R%d' % (100 + n), 'D%d' % (120 + n), 'D%d' % (100 + n), 'R%d' % (120 + n), 'C%d' % (100 + n),
@@ -225,7 +256,7 @@ SHEETS = [
         ['R%d' % (450 + n), 'C%d' % (400 + n), 'R%d' % (400 + n), 'Q%d' % (400 + n), 'R%d' % (410 + n),
          'Q%d' % (410 + n), 'F%d' % (400 + n), 'D%d' % (400 + n), 'C%d' % (410 + n), 'R%d' % (420 + n),
          'R%d' % (430 + n), 'R%d' % (440 + n), 'JP%d' % (400 + n)] for n in range(1, 9)]),
-    ('rs485', 'Isolated RS-485 (UART channel A)', [
+    ('rs485', 'Isolated RS-485 (UART0)', [
         ['PS2', 'C60', 'C61', 'R50'], ['U50', 'C62', 'C63', 'C64', 'R51'],
         ['R52', 'R53', 'R54', 'JP3', 'D7', 'J9']]),
 ]

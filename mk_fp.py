@@ -78,3 +78,49 @@ for num, x, y in ((1, -3.81, py), (2, -1.27, py), (4, 3.81, py), (5, 3.81, -py),
 write('Mornsun_B05_XT-1WR3_SMD',
       'Mornsun B05_XT-1WR3 1 W isolated DC-DC, SMD; pins 3, 6, 7 absent; pin 8 NC',
       'smd', body, pads)
+
+
+# ---------------------------------------------------------------- vendor footprints
+# From Raspberry Pi's CM5 IO board, revision 2, KiCad files (RP-008099-DD-1,
+# vendor/cm5io). Copied unchanged except: the CM5 courtyard covers the whole
+# 55 x 40 mm module (on 1.5 mm connectors nothing fits under it; the original
+# outlines only the two connectors), and the 3D model paths are dropped.
+#   Raspberry-Pi-5-Compute-Module   origin on mounting hole MH (0, 0); holes at
+#       (0, 0), (0, -48), (33, 0), (33, -48), 2.7 mm NPTH; module outline
+#       x -3.5 .. 36.5, y -51.5 .. 3.5; connector 1-100 at x -0.5, 101-200 at x 33.5
+#   TRJG0926HENL                    TRXCOM gigabit MagJack used on the CM5 IO board
+import re as _re
+
+VENDOR = os.path.join(HERE, 'vendor', 'cm5io')
+
+
+def _drop(s, kind, pred):
+    """Remove every top-level (kind ...) element whose text satisfies pred."""
+    out, i = [], 0
+    for m in _re.finditer(r'\n\t\(%s\b' % kind, s):
+        if m.start() < i:
+            continue
+        depth, j = 0, m.start() + 1
+        while True:
+            depth += s[j] == '('
+            depth -= s[j] == ')'
+            j += 1
+            if depth == 0:
+                break
+        if pred(s[m.start():j]):
+            out.append(s[i:m.start()])
+            i = j
+    return ''.join(out) + s[i:]
+
+
+for _name, _crt in (('Raspberry-Pi-5-Compute-Module', (-3.75, -51.75, 36.75, 3.75)),
+                    ('TRJG0926HENL', None)):
+    _s = open(os.path.join(VENDOR, _name + '.kicad_mod'), encoding='utf-8').read()
+    _s = _drop(_s, 'model', lambda e: True)
+    if _crt:
+        _s = _drop(_s, 'fp_line', lambda e: '"F.CrtYd"' in e)
+        _s = _drop(_s, 'fp_rect', lambda e: '"F.CrtYd"' in e)
+        _s = _s.rstrip()[:-1] + rect(*_crt, 'F.CrtYd', 0.05) + ')\n'
+    with open(os.path.join(LIB, _name + '.kicad_mod'), 'w', newline='\n') as _f:
+        _f.write(_s)
+    print('wrote', _name, '(from vendor/cm5io)')
