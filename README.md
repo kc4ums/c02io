@@ -194,6 +194,7 @@ Phoenix MC 1,5/x-G-3.81 headers go up to 16 pins, so the groups are split:
 
 | `mk_sch.py` | Writes `c02io.kicad_sch` (root) and `sch_*.kicad_sch` (cpu, logic, power, inputs, outputs, analog_in, analog_out, rs485), plus the `c02io` symbol library. Chips are boxes in package pin order with the datasheet pin names. |
 | `check_sch.py` | Runs KiCad's ERC and compares the schematic's exported netlist with `board.py`. |
+| `mk_fab.py` | Routes (optionally) with Freerouting, runs DRC, and writes the Gerber and drill zip in `fab/`. |
 
 Regenerate after editing `board.py`:
 
@@ -214,7 +215,26 @@ python check_sch.py
 
 ## Still to do
 
-- **Routing, fab:** routing with Freerouting (run outside Claude Code, as for C02COMM), and `mk_fab.py` (DRC, Gerbers, BOM with LCSC numbers, pick-and-place file).
+- **Routing:** see below.
+- **Assembly files:** a BOM with LCSC numbers and a pick-and-place file for JLCPCB, once the parts are chosen.
+
+## Routing
+
+Run this from **a normal PowerShell window**, not inside Claude Code, after a reboot with little else open. Freerouting's Java heap is about 2 GB, and on C02COMM a long run inside Claude Code ran the PC low on memory.
+
+```
+cd C:\Projects\c02io
+python mk_fab.py --route
+```
+
+It does these steps in order:
+1. `mk_pcb.py` exports `c02io.dsn`.
+2. Freerouting (`%LOCALAPPDATA%reeroutingreerouting.exe`, up to 40 passes, 2 threads) writes `c02io.ses`. Its output also goes to `route_log.txt`.
+3. `mk_pcb.py` rebuilds the board, imports the tracks, and adds a ground pour per area on both outer layers.
+4. KiCad's DRC (errors only) goes to `drc.txt`.
+5. If the DRC is clean, it writes `fab/c02io_gerbers.zip` (4 copper layers).
+
+`python mk_fab.py --route --passes 3` is a short trial. `python mk_fab.py` alone re-runs the DRC and Gerbers on the routed board.
 - **Datasheet details still open:**
   - **SST39SF010A:** only use the Rev F (May 2025) datasheet. It corrected the PLCC pin table.
   - **CJ78L05 (LCSC C2079):** the pin order (1 OUT, 2 GND, 3 IN) came from a mirror of JSCJ's datasheet; check it against LCSC's copy. The SOT-23 version has a different pinout.
