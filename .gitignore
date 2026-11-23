@@ -10,3 +10,4 @@ fp-info-cache
 *.bak
 route_log.txt
 .~lock.*#
+erc.txt

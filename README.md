@@ -2,7 +2,7 @@
 
 Status: **netlist written and checked (2026-11-20).** `board.py` has every part, footprint and pin connection; `python check_board.py` passes. Every chip's pin table was checked against its current datasheet (listed at the top of `board.py`). **Placed (2026-11-23):** every part has its position and rotation in `board.py`, and `python check_place.py png` passes (no courtyard overlaps; every part inside its isolated area; every bridge pad on the right side of its gap). `place.png` shows it.
 
-**KiCad board built (2026-11-23), not routed:** `mk_pcb.py` writes the 4-layer `c02io.kicad_pcb`. Its pad nets match `board.py` pad for pad, and KiCad's DRC shows no errors besides the 499 connections still to route (plus silkscreen-overlap warnings). The schematic (`mk_sch.py`), routing and `mk_fab.py` are next, as in C02COMM (`C:\Projects\mymensch\hardware\c02board`).
+**KiCad board built (2026-11-23), not routed:** `mk_pcb.py` writes the 4-layer `c02io.kicad_pcb`. Its pad nets match `board.py` pad for pad, and KiCad's DRC shows no errors besides the 499 connections still to route (plus silkscreen-overlap warnings). **Schematic generated (2026-11-23):** `mk_sch.py` writes a root sheet and 8 block sheets with a global net label on every pin. `python check_sch.py` passes: KiCad's ERC shows 0 errors and 0 warnings, and the schematic's netlist, exported by KiCad, joins the same pins as `board.py` (396 nets, 513 parts, footprints included). Routing and `mk_fab.py` are next, as in C02COMM (`C:\Projects\mymensch\hardware\c02board`).
 
 ![placement](place.png)
 
@@ -192,11 +192,16 @@ Phoenix MC 1,5/x-G-3.81 headers go up to 16 pins, so the groups are split:
 | `fpgeom.py` | Reads courtyards and pads from the KiCad libraries; prints the `CRT` table in `board.py`. |
 | `mk_pcb.py` | Run with KiCad's Python. Builds `c02io.kicad_pcb` (and the project, rules, `fp-lib-table`): parts, nets, outline, terminal labels, split planes, keep-outs over the gaps. Writes `c02io.dsn` for Freerouting, or imports `c02io.ses` and adds the outer ground pours once routed. |
 
+| `mk_sch.py` | Writes `c02io.kicad_sch` (root) and `sch_*.kicad_sch` (cpu, logic, power, inputs, outputs, analog_in, analog_out, rs485), plus the `c02io` symbol library. Chips are boxes in package pin order with the datasheet pin names. |
+| `check_sch.py` | Runs KiCad's ERC and compares the schematic's exported netlist with `board.py`. |
+
 Regenerate after editing `board.py`:
 
 ```
 python check_board.py
 python check_place.py png
+python mk_sch.py
+python check_sch.py
 "C:\Program Files\KiCad.0in\python.exe" mk_pcb.py
 ```
 
@@ -209,7 +214,7 @@ python check_place.py png
 
 ## Still to do
 
-- **Schematic, routing, fab:** `mk_sch.py` (one sheet per block), routing with Freerouting (run outside Claude Code, as for C02COMM), and `mk_fab.py` (DRC, Gerbers, BOM with LCSC numbers, pick-and-place file).
+- **Routing, fab:** routing with Freerouting (run outside Claude Code, as for C02COMM), and `mk_fab.py` (DRC, Gerbers, BOM with LCSC numbers, pick-and-place file).
 - **Datasheet details still open:**
   - **SST39SF010A:** only use the Rev F (May 2025) datasheet. It corrected the PLCC pin table.
   - **CJ78L05 (LCSC C2079):** the pin order (1 OUT, 2 GND, 3 IN) came from a mirror of JSCJ's datasheet; check it against LCSC's copy. The SOT-23 version has a different pinout.
